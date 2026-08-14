@@ -59,6 +59,9 @@ if(TOKMON_BUILD_TESTS)
     COMMAND tokmon_app --screenshot
             ${CMAKE_CURRENT_BINARY_DIR}/tokmon-workbench.bmp
             --screenshot-demo
+            --ui-scale 1
+            --window-width 1672
+            --window-height 941
             --workspace ${CMAKE_CURRENT_BINARY_DIR}/ui-screenshot-workspace
             --config-dir-name .tokmon)
   set_tests_properties(tokmon_ui_screenshot PROPERTIES

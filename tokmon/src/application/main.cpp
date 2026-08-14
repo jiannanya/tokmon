@@ -1,6 +1,8 @@
 #include <tokmon/app.hpp>
 
+#include <algorithm>
 #include <iostream>
+#include <optional>
 
 int main(int argc, char** argv) {
   try {
@@ -8,6 +10,9 @@ int main(int argc, char** argv) {
     std::string config_dir_name = ".tokmon";
     bool headless_smoke = false;
     bool screenshot_demo = false;
+    std::optional<float> ui_scale;
+    std::optional<int> window_width;
+    std::optional<int> window_height;
     std::filesystem::path screenshot;
     for (int index = 1; index < argc; ++index) {
       const std::string value = argv[index];
@@ -21,30 +26,50 @@ int main(int argc, char** argv) {
         screenshot = argv[++index];
       } else if (value == "--screenshot-demo") {
         screenshot_demo = true;
+      } else if (value == "--ui-scale" && index + 1 < argc) {
+        ui_scale = std::stof(argv[++index]);
+      } else if (value == "--window-width" && index + 1 < argc) {
+        window_width = std::stoi(argv[++index]);
+      } else if (value == "--window-height" && index + 1 < argc) {
+        window_height = std::stoi(argv[++index]);
       }
     }
     auto config =
         tokmon::desktop::load_app_config(workspace, config_dir_name);
+    if (ui_scale) config.ui_scale = std::clamp(*ui_scale, 0.75F, 2.0F);
+    if (window_width) config.window_width = std::max(800, *window_width);
+    if (window_height) config.window_height = std::max(600, *window_height);
     tokmon::desktop::App app(std::move(config));
     if (!screenshot.empty()) {
       if (screenshot_demo) {
         app.projection().append_local(
             tokmon::desktop::ItemKind::user, "You",
-            "对话流不能只是卡片堆叠，要像自然文档一样清晰，并且所有操作都必须真实可用。",
+            "构建时报错，提示找不到 spdlog 和 fmt。请帮我修复 CMake 依赖配置，并确保可以通过编译和测试。",
             "committed", {{"time", tokmon::iso8601()}});
         app.projection().append_local(
-            tokmon::desktop::ItemKind::assistant, "Snow",
-            "已完成 Tokmon 对话流的重新设计，助手回复现在使用连续正文而不是消息卡片。\n\n"
-            "主要能力：\n\n"
-            "- **用户消息**显示为右侧圆角气泡，并提供时间、复制和再次编辑。\n"
-            "- 助手区域显示真实运行耗时、状态分隔线和流式输出状态。\n"
-            "- 支持标题、自然段、项目符号、**粗体**、[设计文档](docs/design.md) 和 `Shift+Enter` 行内代码。\n"
-            "- 工具调用、诊断、审批与产物仍保留结构化状态卡片。\n"
-            "- 长回复可以滚动，并通过底部按钮一键返回最新输出。\n\n"
-            "验证结果：\n\n"
-            "- 对话复制、消息编辑、Markdown 排版和轨迹耗时均有自动化测试。",
+            tokmon::desktop::ItemKind::assistant, "Tokmon Agent",
+            "已分析仓库并执行修复，构建与测试均通过。",
             "committed",
             {{"time", tokmon::iso8601()}, {"elapsed_ms", 2450}});
+        app.projection().append_local(
+            tokmon::desktop::ItemKind::artifact, "CMakeLists.txt",
+            "已读取 · 2.3 KB", "loaded");
+        app.projection().append_local(
+            tokmon::desktop::ItemKind::tool, "Terminal / shell",
+            "cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release\n"
+            "cmake --build build --config Release -j 12\n"
+            "ctest --test-dir build --output-on-failure",
+            "completed");
+        app.projection().append_local(
+            tokmon::desktop::ItemKind::diagnostic, "Build diagnostics", "",
+            "inspected");
+        app.projection().append_local(
+            tokmon::desktop::ItemKind::status, "修复说明",
+            "1. 在 CMakeLists.txt 中补充依赖查找。\n"
+            "2. 为外部依赖设置别名目标并链接到应用。\n"
+            "3. 补充默认安装提示，便于 CI 与本地环境一致。\n"
+            "4. 验证构建与测试，确认问题已解决。",
+            "committed");
       }
       app.capture(screenshot);
       return 0;

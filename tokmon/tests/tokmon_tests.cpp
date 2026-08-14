@@ -281,12 +281,12 @@ int main() {
       assert(hover_action.kind == tokmon::desktop::WorkbenchActionKind::none);
     };
     const float user_bubble_right =
-        desktop_layout.timeline.x + desktop_layout.timeline.width - 24;
+        desktop_layout.timeline.x + desktop_layout.timeline.width - 89;
     // Menu commands, message tools, primary send action and viewer controls
     // all provide visible pointer feedback, not just click hit targets.
     assert_hover_changes("menu", frame, 180, 30);
     assert_hover_changes("message-copy", frame, user_bubble_right - 37,
-                         desktop_layout.timeline.y + 79);
+                         desktop_layout.timeline.y + 92);
     assert_hover_changes("send", frame,
                          desktop_layout.composer.x +
                              desktop_layout.composer.width - 25,
@@ -296,9 +296,9 @@ int main() {
     assert_hover_changes("viewer-tab-close", frame,
                          desktop_layout.viewer.x + 181,
                          desktop_layout.viewer.y + 23);
-    assert_hover_changes("explorer-search", frame,
-                         desktop_layout.explorer.x + 30,
-                         desktop_layout.explorer.y + 76);
+    assert_hover_changes("explorer-row", frame,
+                         desktop_layout.explorer.x + 80,
+                         desktop_layout.explorer.y + 102);
     auto attachment_frame = frame;
     attachment_frame.attachments.push_back({"note.txt", 12});
     assert_hover_changes("attachment-remove", attachment_frame,
@@ -320,7 +320,7 @@ int main() {
                          approval_x + approval_width - 57,
                          desktop_layout.conversation.y + 304);
     auto action = workbench.dispatch(
-        {"click", user_bubble_right - 37, desktop_layout.timeline.y + 79});
+        {"click", user_bubble_right - 37, desktop_layout.timeline.y + 92});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::copy_text);
     assert(action.value == "hello");
     action = workbench.dispatch(

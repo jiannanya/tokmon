@@ -136,6 +136,7 @@ void Projection::apply(const snow::TrajectoryEvent &event) {
         "session/closed",
         "session/end",
         "session/end-seed",
+        "inbox/claimed",
         "run/start",
         "run/end",
         "turn/start",

@@ -149,8 +149,8 @@ App::App(AppConfig config)
   config_.max_steps =
       setting_number(settings_.max_steps, config_.max_steps, 1, 1024);
   window_ = white_.service().create_window({.title = "Tokmon · Arche Agent OS",
-                                            .width = 1500,
-                                            .height = 900,
+                                            .width = config_.window_width,
+                                            .height = config_.window_height,
                                             .resizable = true,
                                             .borderless = true,
                                             .ui_scale = config_.ui_scale,

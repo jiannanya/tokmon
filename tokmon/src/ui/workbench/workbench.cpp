@@ -330,23 +330,11 @@ std::string clock_label(const tokmon::Json &metadata) {
   return formatted.str();
 }
 
-std::string elapsed_label(const ConversationItem &item) {
-  if (item.status == "streaming")
-    return "正在生成";
-  if (!item.metadata.contains("elapsed_ms"))
-    return "已完成";
-  const auto millis = std::max<std::int64_t>(
-      0, item.metadata.value("elapsed_ms", std::int64_t{0}));
-  const auto seconds = (millis + 999) / 1000;
-  const auto minutes = seconds / 60;
-  const auto remainder = seconds % 60;
-  if (minutes > 0)
-    return "耗时 " + std::to_string(minutes) + "分 " +
-           std::to_string(remainder) + "秒";
-  return "耗时 " + std::to_string(remainder) + "秒";
-}
-
 std::string normalized_title(const WorkbenchFrame &frame) {
+  const auto active = std::ranges::find(frame.session_items(), frame.session_id,
+                                        &WorkbenchSession::id);
+  if (active != frame.session_items().end() && !active->title.empty())
+    return utf8_prefix(active->title, 34);
   for (const auto &item : frame.conversation_items()) {
     if (item.kind != ItemKind::user || item.content.empty())
       continue;
@@ -442,22 +430,35 @@ std::string setting_value(const DesktopSettings &settings,
   return {};
 }
 
+bool visible_conversation_item(const ConversationItem &item) {
+  // Canonical control-plane events belong in the trajectory inspector. They
+  // add noise to the human conversation and were the source of the large raw
+  // JSON blocks visible in the previous UI.
+  return !(item.kind == ItemKind::status && item.title.starts_with("Event /"));
+}
+
 float item_height(const ConversationItem &item, float width) {
-  const auto columns =
-      std::max<std::size_t>(28, static_cast<std::size_t>(width / 8.2F));
-  const auto visual_lines = std::max<std::size_t>(
-      1, (utf8_length(item.content) + columns - 1) / columns);
+  // A retained card's height must be derived from its explicit line breaks as
+  // well as wrapping. Counting only the total byte length made four short
+  // numbered lines look like a single paragraph and clipped the final rows.
+  std::size_t visual_lines = 0;
+  const auto content_width = std::min(width, 500.0F) - 28.0F;
+  for (const auto &line : split_lines(item.content))
+    visual_lines += estimated_rows(line, content_width, 10.0F);
+  visual_lines = std::max<std::size_t>(1, visual_lines);
   switch (item.kind) {
   case ItemKind::user:
-    return 40 + static_cast<float>(visual_lines) * 21;
+    return 72 + static_cast<float>(visual_lines) * 12;
   case ItemKind::assistant:
-    return 45 + markdown_height(item.content, width - 28);
+    return 18 + markdown_height(item.content, width - 92);
   case ItemKind::tool:
+    return 58 + static_cast<float>(std::min<std::size_t>(visual_lines, 4)) * 17;
   case ItemKind::artifact:
+    return 88;
   case ItemKind::diagnostic:
-    return 68 + static_cast<float>(std::min<std::size_t>(visual_lines, 5)) * 18;
+    return 98;
   default:
-    return 50 + static_cast<float>(std::min<std::size_t>(visual_lines, 3)) * 18;
+    return 64 + static_cast<float>(std::min<std::size_t>(visual_lines, 4)) * 19;
   }
 }
 
@@ -515,12 +516,17 @@ void draw_icon(RasterSurface &surface, std::string_view name, float x, float y,
     surface.line(x - 2, y + 5, x - 2, y + 8, color, 1.2F);
     surface.line(x + 2, y + 5, x + 2, y + 8, color, 1.2F);
   } else if (name == "settings") {
-    surface.stroke_rect({x - 5, y - 5, 10, 10}, color, 1.2F, 5);
-    surface.fill_circle(x, y, 2, color);
+    surface.stroke_rect({x - 5.5F, y - 5.5F, 11, 11}, color, 1.2F, 5.5F);
+    surface.stroke_rect({x - 1.8F, y - 1.8F, 3.6F, 3.6F}, color, 1.1F,
+                        1.8F);
     surface.line(x, y - 8, x, y - 5, color, 1.2F);
     surface.line(x, y + 5, x, y + 8, color, 1.2F);
     surface.line(x - 8, y, x - 5, y, color, 1.2F);
     surface.line(x + 5, y, x + 8, y, color, 1.2F);
+    surface.line(x - 5.7F, y - 5.7F, x - 3.8F, y - 3.8F, color, 1.2F);
+    surface.line(x + 3.8F, y + 3.8F, x + 5.7F, y + 5.7F, color, 1.2F);
+    surface.line(x + 5.7F, y - 5.7F, x + 3.8F, y - 3.8F, color, 1.2F);
+    surface.line(x - 3.8F, y + 3.8F, x - 5.7F, y + 5.7F, color, 1.2F);
   } else if (name == "model") {
     surface.stroke_rect({x - 7, y - 6, 14, 12}, color, 1.2F, 3);
     surface.fill_circle(x - 3, y, 1.5F, color);
@@ -1035,7 +1041,7 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
   // commands, and settings/account controls grouped with native window chrome.
   surface.fill_rect(last_layout_.menu_bar, app_background);
   draw_icon(surface, "branch", 27, 32, ink);
-  label(surface, "Tokmon", {48, 20, 82, 26}, 17, ink, 700);
+  label(surface, "Tokmon", {57, 19, 88, 28}, 18, ink, 700);
   constexpr Rect menu_items[] = {{154, 13, 54, 38},
                                  {212, 13, 54, 38},
                                  {270, 13, 54, 38},
@@ -1045,13 +1051,13 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
     if (hovered(menu_items[index]) || active_menu_ == menu_ids[index])
       surface.fill_rect(menu_items[index], hover_fill, 6);
   }
-  label(surface, "文件", menu_items[0], 14, ink, 450, 1,
+  label(surface, "文件", menu_items[0], 15, ink, 450, 1,
         white::TextAlign::center);
-  label(surface, "编辑", menu_items[1], 14, ink, 450, 1,
+  label(surface, "编辑", menu_items[1], 15, ink, 450, 1,
         white::TextAlign::center);
-  label(surface, "视图", menu_items[2], 14, ink, 450, 1,
+  label(surface, "视图", menu_items[2], 15, ink, 450, 1,
         white::TextAlign::center);
-  label(surface, "帮助", menu_items[3], 14, ink, 450, 1,
+  label(surface, "帮助", menu_items[3], 15, ink, 450, 1,
         white::TextAlign::center);
   for (std::size_t index = 0; index < std::size(menu_items); ++index)
     hits_.push_back({menu_items[index],
@@ -1069,8 +1075,10 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
     surface.fill_rect(account_button, hover_fill, 12);
   surface.fill_circle(account_button.x + 23, account_button.y + 22, 16,
                       {232, 224, 211, 255});
-  label(surface, "T", {account_button.x + 13, account_button.y + 11, 20, 22},
-        11, ink, 700, 1, white::TextAlign::center);
+  surface.fill_circle(account_button.x + 23, account_button.y + 18, 5,
+                      {55, 52, 49, 255});
+  surface.fill_rect({account_button.x + 15, account_button.y + 24, 16, 10},
+                    {55, 52, 49, 255}, 7);
   add_hit(account_button, WorkbenchActionKind::toggle_profile_menu);
   surface.line(width - 158, 14, width - 158, 50, hairline);
   const Rect minimize{width - 132, 0, 44, 63};
@@ -1096,6 +1104,10 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
   // Project navigator. Sessions are grouped below the active workspace and
   // product destinations read like project tree entries rather than a toolbar.
   if (last_layout_.sidebar.width > 0) {
+    surface.fill_rect({last_layout_.sidebar.x + 1, last_layout_.sidebar.y + 2,
+                       last_layout_.sidebar.width,
+                       last_layout_.sidebar.height},
+                      {36, 42, 52, 10}, panel_radius);
     surface.fill_rect(last_layout_.sidebar, sidebar_background, panel_radius);
     surface.stroke_rect(last_layout_.sidebar, hairline, 1, panel_radius);
     const float side_x = last_layout_.sidebar.x;
@@ -1132,7 +1144,7 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
                           frame.filter_focused ? 1.3F : 1.0F, 9);
       draw_icon(surface, "search", search.x + 17, search.y + 20, muted);
       label(surface, "搜索项目或会话…",
-            {search.x + 36, search.y + 10, search.width - 90, 21}, 12, muted,
+            {search.x + 36, search.y + 9, search.width - 90, 22}, 13, muted,
             400);
       const Rect shortcut{search.x + search.width - 58, search.y + 8, 48, 24};
       surface.fill_rect(shortcut, {249, 250, 251, 255}, 6);
@@ -1143,7 +1155,7 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
 
       const auto section_header = [&](std::string_view title, float y,
                                       bool create_session) {
-        label(surface, title, {side_x + 20, y, side_w - 96, 22}, 13, ink, 650);
+        label(surface, title, {side_x + 20, y, side_w - 96, 22}, 14, ink, 650);
         const Rect plus{side_x + side_w - 76, y - 5, 28, 28};
         const Rect more{side_x + side_w - 42, y - 5, 28, 28};
         if (hovered(plus)) surface.fill_rect(plus, hover_fill, 7);
@@ -1162,7 +1174,7 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
         draw_icon(surface, icon, row.x + 18, row.y + row.height / 2,
                   selected ? ink : secondary);
         label(surface, text,
-              {row.x + 36, row.y + 7, row.width - 44, row.height - 10}, 12,
+              {row.x + 36, row.y + 6, row.width - 44, row.height - 9}, 13,
               selected ? ink : secondary, selected ? 600 : 450);
         hits_.push_back({row, action, {}, std::move(value)});
       };
@@ -1178,7 +1190,7 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
       label(surface, workspace_.filename().string(),
             {workspace_row.x + 54, workspace_row.y + 6,
              workspace_row.width - 62, 21},
-            12, ink, 600);
+            13, ink, 600);
       y += 34;
       std::size_t shown_sessions = 0;
       for (const auto &session : frame.session_items()) {
@@ -1205,7 +1217,7 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
                 secondary);
       label(surface, "plugin-playground",
             {playground.x + 54, playground.y + 6, playground.width - 62, 21},
-            12, ink, 550);
+            13, ink, 550);
       y += 34;
       tree_row({side_x + 46, y, side_w - 58, 34}, "plugin",
                "插件通信机制设计", false, WorkbenchActionKind::open_plugins);
@@ -1221,7 +1233,7 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
       draw_icon(surface, "chevron", notes.x + 13, notes.y + 16, secondary);
       draw_icon(surface, "folder", notes.x + 35, notes.y + 16, secondary);
       label(surface, "notes", {notes.x + 54, notes.y + 6, notes.width - 62, 21},
-            12, ink, 550);
+            13, ink, 550);
       y += 34;
       tree_row({side_x + 46, y, side_w - 58, 34}, "chat", "待办清单",
                false, WorkbenchActionKind::redraw);
@@ -1237,7 +1249,7 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
       if (hovered(archive)) surface.fill_rect(archive, hover_fill, 9);
       draw_icon(surface, "file", archive.x + 18, archive.y + 21, secondary);
       label(surface, "归档项目",
-            {archive.x + 38, archive.y + 10, archive.width - 70, 22}, 12,
+            {archive.x + 38, archive.y + 9, archive.width - 70, 23}, 13,
             secondary, 550);
       draw_icon(surface, "chevron", archive.x + archive.width - 18,
                 archive.y + 21, muted);
@@ -1247,6 +1259,9 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
 
   // Conversation panel and header.
   const auto &conversation = last_layout_.conversation;
+  surface.fill_rect({conversation.x + 1, conversation.y + 2,
+                     conversation.width, conversation.height},
+                    {36, 42, 52, 10}, panel_radius);
   surface.fill_rect(conversation, panel, panel_radius);
   surface.stroke_rect(conversation, hairline, 1, panel_radius);
   const float header_bottom = conversation.y + 62;
@@ -1267,12 +1282,10 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
                        trajectory_tab.width - 24, 2},
                       accent, 1);
   } else {
-    surface.fill_circle(conversation.x + 23, conversation.y + 31, 3.5F,
-                        frame.turn_active ? accent : success);
     label(surface, normalized_title(frame),
-          {conversation.x + 36, conversation.y + 20,
-           conversation.width - 230, 26},
-          14, ink, 650);
+          {conversation.x + 20, conversation.y + 20,
+           conversation.width - 214, 26},
+          15, ink, 650);
   }
   if (trajectory_open_) {
     add_hit(conversation_tab, WorkbenchActionKind::show_conversation);
@@ -1303,9 +1316,14 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
 
   // Conversation timeline.
   const auto &timeline = last_layout_.timeline;
-  float content_height = 30;
-  for (const auto &item : frame.conversation_items())
-    content_height += item_height(item, timeline.width - 64) + 14;
+  float content_height = 10;
+  bool has_visible_item = false;
+  for (const auto &item : frame.conversation_items()) {
+    if (!visible_conversation_item(item)) continue;
+    if (has_visible_item) content_height += 10;
+    content_height += item_height(item, timeline.width - 64);
+    has_visible_item = true;
+  }
   timeline_max_scroll_ = std::max(0.0F, content_height - timeline.height);
   if (frame.conversation_items().size() != previous_item_count_) {
     if (follow_tail_ && frame.settings.auto_scroll)
@@ -1314,7 +1332,7 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
   }
   timeline_scroll_ = std::clamp(timeline_scroll_, 0.0F, timeline_max_scroll_);
   surface.push_clip(timeline);
-  float item_y = timeline.y + 20 - timeline_scroll_;
+  float item_y = timeline.y + 10 - timeline_scroll_;
   if (frame.conversation_items().empty()) {
     const float welcome_width = std::min(390.0F, timeline.width - 70);
     const Rect welcome{timeline.x + (timeline.width - welcome_width) / 2,
@@ -1347,84 +1365,184 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
                      "检查当前工作区并给出下一步建议"});
   } else {
     for (const auto &item : frame.conversation_items()) {
+      if (!visible_conversation_item(item)) continue;
       const float card_height = item_height(item, timeline.width - 64);
       if (item_y + card_height > timeline.y &&
           item_y < timeline.y + timeline.height) {
         if (item.kind == ItemKind::user) {
           const auto rows = estimated_rows(
-              item.content, std::min(timeline.width * 0.76F, 450.0F), 14);
+              item.content, std::min(timeline.width * 0.72F, 520.0F), 13);
           const float bubble_width =
-              std::clamp(38.0F + visual_units(item.content) * 8.1F, 170.0F,
-                         std::min(timeline.width * 0.76F, 450.0F));
-          const float bubble_height = 22.0F + static_cast<float>(rows) * 21.0F;
-          const Rect bubble{timeline.x + timeline.width - bubble_width - 24,
-                            item_y, bubble_width, bubble_height};
-          surface.fill_rect(bubble, {239, 240, 238, 255}, 15);
+              std::clamp(36.0F + visual_units(item.content) * 7.7F, 132.0F,
+                         std::min(timeline.width * 0.72F, 520.0F));
+          const float bubble_height = 18.0F + static_cast<float>(rows) * 20.0F;
+          const float avatar_x = timeline.x + timeline.width - 52;
+          const Rect bubble{avatar_x - bubble_width - 37, item_y + 27,
+                            bubble_width, bubble_height};
+          label(surface, "用户", {bubble.x + 12, item_y + 3, 48, 20}, 10, ink,
+                600);
+          label(surface, clock_label(item.metadata),
+                {bubble.x + 58, item_y + 3, 52, 20}, 9, muted, 430);
+          surface.fill_circle(avatar_x, item_y + 19, 17,
+                              {238, 230, 218, 255});
+          surface.fill_circle(avatar_x, item_y + 15, 5, {67, 58, 52, 255});
+          surface.fill_rect({avatar_x - 8, item_y + 21, 16, 10},
+                            {67, 58, 52, 255}, 7);
+          surface.fill_rect({bubble.x + 1, bubble.y + 3, bubble.width,
+                             bubble.height},
+                            {63, 102, 164, 16}, 13);
+          surface.fill_rect(bubble, {238, 246, 255, 255}, 13);
+          surface.stroke_rect(bubble, {194, 216, 245, 255}, 1, 13);
           label(surface, item.content,
-                {bubble.x + 14, bubble.y + 10, bubble.width - 28,
-                 bubble.height - 17},
-                14, ink, 400, rows, white::TextAlign::left, false, 1.5F);
+                {bubble.x + 14, bubble.y + 8, bubble.width - 28,
+                 bubble.height - 14},
+                13, ink, 400, rows, white::TextAlign::left, false, 1.48F);
           const float meta_y = bubble.y + bubble.height + 7;
           const Rect edit{bubble.x + bubble.width - 20, meta_y, 20, 20};
           const Rect copy{edit.x - 27, meta_y, 20, 20};
-          label(surface, clock_label(item.metadata),
-                {bubble.x + bubble.width - 104, meta_y + 2, 50, 18}, 10, muted,
-                400, 1, white::TextAlign::right);
-          if (hovered(copy))
-            surface.fill_rect(copy, hover_fill, 6);
-          if (hovered(edit))
-            surface.fill_rect(edit, hover_fill, 6);
-          draw_icon(surface, "copy", copy.x + 10, copy.y + 9,
-                    hovered(copy) ? accent : muted);
-          draw_icon(surface, "edit", edit.x + 10, edit.y + 9,
-                    hovered(edit) ? accent : muted);
+          if (hovered(bubble) || hovered(copy) || hovered(edit)) {
+            if (hovered(copy)) surface.fill_rect(copy, hover_fill, 6);
+            if (hovered(edit)) surface.fill_rect(edit, hover_fill, 6);
+            draw_icon(surface, "copy", copy.x + 10, copy.y + 9,
+                      hovered(copy) ? accent : muted);
+            draw_icon(surface, "edit", edit.x + 10, edit.y + 9,
+                      hovered(edit) ? accent : muted);
+          }
           hits_.push_back(
               {copy, WorkbenchActionKind::copy_text, {}, item.content});
           hits_.push_back(
               {edit, WorkbenchActionKind::set_message_input, {}, item.content});
         } else if (item.kind == ItemKind::assistant) {
           const float flow_x = timeline.x + 26;
-          const float flow_width = timeline.width - 52;
-          label(surface, elapsed_label(item) + "  ›",
-                {flow_x, item_y + 2, 180, 20}, 11, muted, 450);
+          const float content_x = flow_x + 54;
+          const float content_width = std::min(560.0F, timeline.width - 106);
+          surface.fill_circle(flow_x + 20, item_y + 22, 21,
+                              {45, 48, 54, 14});
+          surface.fill_circle(flow_x + 20, item_y + 20, 20, panel);
+          surface.stroke_rect({flow_x, item_y, 40, 40}, hairline, 1, 20);
+          draw_icon(surface, "branch", flow_x + 20, item_y + 20, ink);
+          label(surface, "Tokmon Agent", {content_x, item_y + 2, 132, 22}, 12,
+                ink, 620);
+          label(surface,
+                item.status == "streaming" ? "正在生成"
+                                            : clock_label(item.metadata),
+                {content_x + 108, item_y + 3, 82, 21}, 9, muted, 430);
           if (item.status == "streaming")
-            surface.fill_circle(flow_x - 10, item_y + 11, 3, accent);
-          surface.line(flow_x, item_y + 29, flow_x + flow_width, item_y + 29,
-                       hairline, 1);
-          draw_markdown(surface, item.content, flow_x, item_y + 42, flow_width);
+            surface.fill_circle(content_x - 11, item_y + 13, 3, accent);
+          draw_markdown(surface, item.content, content_x, item_y + 30,
+                        content_width);
         } else {
-          const float card_width = timeline.width - 52;
-          const Rect card{timeline.x + 26, item_y, card_width, card_height};
-          Color card_fill{250, 250, 249, 255};
+          const float card_width = std::min(500.0F, timeline.width - 108);
+          const Rect card{timeline.x + 80, item_y, card_width, card_height};
+          Color card_fill = panel;
           Color border = hairline;
-          if (item.kind == ItemKind::artifact) {
-            card_fill = {240, 250, 244, 255};
-            border = {196, 228, 207, 255};
-          } else if (item.kind == ItemKind::diagnostic) {
-            card_fill = {246, 244, 253, 255};
-            border = {220, 214, 242, 255};
-          } else if (item.kind == ItemKind::error) {
-            card_fill = {255, 242, 242, 255};
-            border = {242, 198, 198, 255};
+          if (item.kind == ItemKind::error) {
+            card_fill = {255, 246, 246, 255};
+            border = {242, 205, 205, 255};
           }
+          surface.fill_rect({card.x + 2, card.y + 4, card.width, card.height},
+                            {40, 45, 55, 16}, 10);
           surface.fill_rect(card, card_fill, 9);
           surface.stroke_rect(card, border, 1, 9);
-          surface.fill_circle(card.x + 12, card.y + 14, 3,
-                              item.kind == ItemKind::error ? danger : success);
-          label(surface, item.title,
-                {card.x + 22, card.y + 6, card.width - 120, 20}, 11,
-                item.kind == ItemKind::error ? danger : secondary, 600);
-          label(surface, item.status,
-                {card.x + card.width - 90, card.y + 6, 76, 20}, 10, muted, 450,
-                1, white::TextAlign::right);
-          label(surface, item.content,
-                {card.x + 14, card.y + 31, card.width - 28, card.height - 38},
-                item.kind == ItemKind::tool ? 12.0F : 13.0F,
-                item.kind == ItemKind::error ? danger : ink, 400, 5,
-                white::TextAlign::left, item.kind == ItemKind::tool, 1.42F);
+          const auto title = item.kind == ItemKind::tool
+                                 ? (item.title.contains("shell")
+                                        ? "执行的命令"
+                                        : item.title.contains("write_file")
+                                              ? "修改的文件"
+                                              : "调用的能力")
+                             : item.kind == ItemKind::artifact
+                                 ? "分析的文件"
+                             : item.kind == ItemKind::diagnostic
+                                 ? "构建与测试结果"
+                             : item.kind == ItemKind::error ? "执行失败"
+                                                           : item.title;
+          draw_icon(surface,
+                    item.kind == ItemKind::diagnostic ? "pulse"
+                    : item.kind == ItemKind::tool     ? "plugin"
+                                                     : "file",
+                    card.x + 17, card.y + 18,
+                    item.kind == ItemKind::error ? danger : secondary);
+          label(surface, title, {card.x + 34, card.y + 7, card.width - 142, 21},
+                11, item.kind == ItemKind::error ? danger : ink, 620);
+          if (item.status == "completed" || item.status == "committed" ||
+              item.status == "loaded" || item.status == "inspected" ||
+              item.status == "ok") {
+            const Rect badge{card.x + card.width - 89, card.y + 7, 74, 23};
+            surface.fill_rect(badge, {235, 248, 239, 255}, 11);
+            label(surface, "全部成功", badge, 8, success, 600, 1,
+                  white::TextAlign::center);
+          } else {
+            label(surface, item.status,
+                  {card.x + card.width - 90, card.y + 8, 76, 20}, 9, muted,
+                  450, 1, white::TextAlign::right);
+          }
+
+          if (item.kind == ItemKind::diagnostic) {
+            const Rect runtime{card.x + 12, card.y + 38,
+                               (card.width - 32) / 2, 48};
+            const Rect composition{runtime.x + runtime.width + 8, runtime.y,
+                                   runtime.width, runtime.height};
+            for (const auto &tile : {runtime, composition}) {
+              surface.fill_rect(tile, {250, 251, 250, 255}, 8);
+              surface.stroke_rect(tile, hairline, 1, 8);
+              surface.fill_circle(tile.x + 21, tile.y + 20, 11,
+                                  {91, 184, 116, 255});
+              label(surface, "✓", {tile.x + 12, tile.y + 10, 18, 20}, 10,
+                    {255, 255, 255, 255}, 700, 1,
+                    white::TextAlign::center);
+            }
+            label(surface, "Arche 运行时",
+                  {runtime.x + 39, runtime.y + 6, runtime.width - 47, 19}, 9,
+                  ink, 600);
+            label(surface, "运行正常",
+                  {runtime.x + 39, runtime.y + 24, runtime.width - 47, 18}, 8,
+                  success, 500);
+            label(surface, "White 组合状态",
+                  {composition.x + 39, composition.y + 6,
+                   composition.width - 47, 19},
+                  9, ink, 600);
+            label(surface, "组件已就绪",
+                  {composition.x + 39, composition.y + 24,
+                   composition.width - 47, 18},
+                  8, success, 500);
+          } else if (item.kind == ItemKind::artifact) {
+            const Rect file_row{card.x + 12, card.y + 36, card.width - 24, 39};
+            surface.fill_rect(file_row, {250, 251, 252, 255}, 7);
+            draw_icon(surface, "file", file_row.x + 18, file_row.y + 20,
+                      secondary);
+            label(surface, utf8_prefix(item.title, 52),
+                  {file_row.x + 38, file_row.y + 3, file_row.width - 78, 20},
+                  11, ink, 560);
+            label(surface, utf8_prefix(item.content, 68),
+                  {file_row.x + 38, file_row.y + 21, file_row.width - 78, 16},
+                  9, muted, 430);
+            draw_icon(surface, "chevron", file_row.x + file_row.width - 18,
+                      file_row.y + 20, muted);
+          } else if (item.kind == ItemKind::tool) {
+            float line_y = card.y + 35;
+            std::size_t shown = 0;
+            for (auto line : split_lines(item.content)) {
+              if (shown >= 4) break;
+              if (line.empty() || line == "{" || line == "}") continue;
+              line = utf8_prefix(line, 92);
+              label(surface, "✓", {card.x + 14, line_y, 18, 18}, 9, success,
+                    650, 1, white::TextAlign::center);
+              label(surface, line,
+                    {card.x + 35, line_y, card.width - 49, 18}, 10, secondary,
+                    430, 1, white::TextAlign::left, true);
+              line_y += 17;
+              ++shown;
+            }
+          } else {
+            label(surface, item.content,
+                  {card.x + 14, card.y + 39, card.width - 28,
+                   card.height - 49},
+                  10, item.kind == ItemKind::error ? danger : secondary, 430,
+                  4, white::TextAlign::left, false, 1.42F);
+          }
         }
       }
-      item_y += card_height + 14;
+      item_y += card_height + 10;
     }
   }
   surface.pop_clip();
@@ -1880,6 +1998,8 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
   // File/document viewer, matching the reference's docked inspector.
   if (last_layout_.viewer_visible) {
     const auto &viewer = last_layout_.viewer;
+    surface.fill_rect({viewer.x + 1, viewer.y + 2, viewer.width, viewer.height},
+                      {36, 42, 52, 10}, panel_radius);
     surface.fill_rect(viewer, panel, panel_radius);
     surface.stroke_rect(viewer, hairline, 1, panel_radius);
     surface.line(viewer.x, viewer.y + 62, viewer.x + viewer.width,
@@ -1893,7 +2013,7 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
       const Rect tab{tab_x, viewer.y + 8, 72, 48};
       if (hovered(tab)) surface.fill_rect(tab, hover_fill, 8);
       const bool selected = viewer_tab_ == id;
-      label(surface, text, tab, 13, selected ? ink : secondary,
+      label(surface, text, tab, 14, selected ? ink : secondary,
             selected ? 650 : 450, 1, white::TextAlign::center);
       if (selected)
         surface.fill_rect({tab.x + 12, viewer.y + 60, tab.width - 24, 2},
@@ -1912,7 +2032,7 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
     surface.fill_rect(doc, panel);
     if (viewer_tab_ == "workspace") {
       label(surface, "工作区概览", {doc.x + 20, doc.y + 20, doc.width - 40, 24},
-            13, ink, 650);
+            14, ink, 650);
       struct OverviewRow {
         std::string_view key;
         std::string value;
@@ -1921,35 +2041,46 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
           OverviewRow{"分支", "main"}, OverviewRow{"变更", "3"},
           OverviewRow{"构建类型", "Release"}, OverviewRow{"CMake 版本", "3.27.7"},
           OverviewRow{"生成器", "Ninja"}, OverviewRow{"工具链", "Clang 17"}};
+      const bool compact_overview = doc.height < 720.0F;
+      const float row_step = compact_overview ? 34.0F : 46.0F;
       float y = doc.y + 64;
       for (const auto &row : rows) {
-        label(surface, row.key, {doc.x + 20, y, 92, 22}, 11, muted, 500);
-        label(surface, row.value, {doc.x + 126, y, doc.width - 146, 22}, 11,
+        label(surface, row.key, {doc.x + 20, y, 92, 22}, 12, muted, 500);
+        label(surface, row.value, {doc.x + 126, y, doc.width - 146, 22}, 12,
               ink, 550);
-        y += 46;
+        y += row_step;
       }
+      y += compact_overview ? 18.0F : 28.0F;
       surface.line(doc.x + 18, y + 2, doc.x + doc.width - 18, y + 2, hairline);
-      label(surface, "快捷操作", {doc.x + 20, y + 24, doc.width - 40, 22}, 12,
+      label(surface, "快捷操作", {doc.x + 20, y + 24, doc.width - 40, 22}, 13,
             ink, 650);
-      y += 58;
+      y += compact_overview ? 54.0F : 58.0F;
       constexpr std::array<std::pair<std::string_view, std::string_view>, 4>
           actions{{{"配置项目", "重新运行 CMake 配置"},
                    {"构建项目", "生成目标"},
                    {"运行测试", "执行所有测试"},
                    {"清理构建", "清理构建目录"}}};
+      const float action_gap = compact_overview ? 6.0F : 8.0F;
+      const float action_height = std::clamp(
+          (doc.y + doc.height - y - 18.0F - action_gap * 3.0F) / 4.0F,
+          44.0F, 66.0F);
       for (const auto &[title, subtitle] : actions) {
-        const Rect card{doc.x + 18, y, doc.width - 36, 66};
-        if (hovered(card)) surface.fill_rect(card, hover_fill, 10);
+        const Rect card{doc.x + 18, y, doc.width - 36, action_height};
+        surface.fill_rect({card.x + 1, card.y + 2, card.width, card.height},
+                          {39, 44, 54, 10}, 10);
+        surface.fill_rect(card, hovered(card) ? hover_fill : panel, 10);
         surface.stroke_rect(card, hairline, 1, 10);
-        label(surface, title, {card.x + 14, card.y + 10, card.width - 54, 20},
-              11, ink, 600);
-        label(surface, subtitle,
-              {card.x + 14, card.y + 32, card.width - 54, 18}, 9, muted, 450);
+        label(surface, title, {card.x + 14, card.y + 8, card.width - 54, 21},
+              12, ink, 600);
+        if (action_height >= 54)
+          label(surface, subtitle,
+                {card.x + 14, card.y + 29, card.width - 54, 18}, 10, muted,
+                450);
         draw_icon(surface, title == "清理构建" ? "window-close" : "chevron",
-                  card.x + card.width - 20, card.y + 33, muted);
+                  card.x + card.width - 20, card.y + card.height / 2, muted);
         add_hit(card, title == "运行测试" ? WorkbenchActionKind::diagnostics
                                            : WorkbenchActionKind::inspect_composition);
-        y += 74;
+        y += action_height + action_gap;
       }
       document_scroll_ = 0;
       document_max_scroll_ = 0;
@@ -2002,40 +2133,14 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
     surface.line(explorer.x, explorer.y, explorer.x,
                  explorer.y + explorer.height, hairline);
     label(surface, "文件", {explorer.x + 20, explorer.y + 20,
-                             explorer.width - 58, 24}, 13, ink, 650);
+                             explorer.width - 58, 24}, 14, ink, 650);
     draw_icon(surface, "chevron", explorer.x + explorer.width - 24,
               explorer.y + 31, secondary);
-    const Rect search{explorer.x + 14, explorer.y + 58, explorer.width - 28,
-                      36};
-    surface.fill_rect(search,
-                      hovered(search) ? Color{252, 252, 251, 255} : panel, 7);
-    surface.stroke_rect(search,
-                        frame.filter_focused
-                            ? accent
-                            : (hovered(search) ? hover_border : hairline),
-                        frame.filter_focused ? 1.4F : 1.0F, 7);
-    draw_icon(surface, "search", search.x + 18, search.y + 18, muted);
-    const Rect filter_editor{search.x + 36, search.y + 8, search.width - 46,
-                             21};
-    filter_editor_bounds_ = filter_editor;
-    filter_editor_text_ = frame.file_filter;
-    if (frame.file_filter.empty()) {
-      label(surface, "筛选文件…", filter_editor, 11, muted);
-      if (frame.filter_focused && frame.caret_visible)
-        surface.line(filter_editor.x, filter_editor.y + 1, filter_editor.x,
-                     filter_editor.y + 16, accent, 1.3F);
-    } else {
-      draw_editor_text(surface, frame.file_filter, filter_editor,
-                       frame.editor_cursor, frame.selection_start,
-                       frame.selection_end, frame.filter_focused,
-                       frame.caret_visible, 11, 1);
-    }
-    add_hit(search, WorkbenchActionKind::focus_filter);
-    float file_y = explorer.y + 108;
+    float file_y = explorer.y + 58;
     draw_icon(surface, "chevron", explorer.x + 20, file_y + 12, secondary);
     draw_icon(surface, "folder", explorer.x + 42, file_y + 12, secondary);
     label(surface, workspace_.filename().string(),
-          {explorer.x + 60, file_y + 1, explorer.width - 70, 22}, 12, ink, 600);
+          {explorer.x + 60, file_y, explorer.width - 70, 23}, 13, ink, 600);
     file_y += 30;
     for (const auto &entry : files_) {
       if (file_y + 25 > explorer.y + explorer.height)
@@ -2058,7 +2163,7 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
                 row.x + 36 + indent, row.y + 14,
                 entry.directory ? secondary : muted);
       label(surface, entry.label,
-            {row.x + 54 + indent, row.y + 5, row.width - 60 - indent, 20}, 11,
+            {row.x + 54 + indent, row.y + 4, row.width - 60 - indent, 21}, 12,
             selected ? ink : secondary, selected ? 600 : 400);
       hits_.push_back({row,
                        WorkbenchActionKind::redraw,

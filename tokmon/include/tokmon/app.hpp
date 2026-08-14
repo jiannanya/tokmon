@@ -34,6 +34,8 @@ struct AppConfig {
   std::chrono::milliseconds restart_base_delay{250};
   std::chrono::milliseconds poll_interval{25};
   float ui_scale{1.25F};
+  int window_width{1500};
+  int window_height{900};
   std::chrono::milliseconds request_timeout{std::chrono::minutes(5)};
   std::string model;
   std::size_t max_steps{32};
