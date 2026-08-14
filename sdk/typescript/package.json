@@ -1,0 +1,14 @@
+{
+  "name": "@tokmon/snow",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.mjs"
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

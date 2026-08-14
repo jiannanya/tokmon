@@ -1,0 +1,10 @@
+{
+  "schema": "org.tokmon.snow.bootstrap/v1",
+  "workspace": "C:/work/example",
+  "config_dir_name": ".snow",
+  "data_root": "C:/work/example/.snow/data",
+  "max_steps": 32,
+  "max_context_chars": 524288,
+  "max_tool_result_bytes": 262144,
+  "raw_trace": false
+}

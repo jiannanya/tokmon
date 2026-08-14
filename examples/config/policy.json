@@ -1,0 +1,11 @@
+{
+  "schema": "org.tokmon.snow.policy/v1",
+  "defaults": {
+    "read_only": "allow",
+    "mutating": "ask"
+  },
+  "tools": {
+    "shell": "ask",
+    "mcp__*": "ask"
+  }
+}

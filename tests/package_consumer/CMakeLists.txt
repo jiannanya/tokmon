@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.25)
+project(tokmon_package_consumer LANGUAGES C CXX)
+find_package(Tokmon CONFIG REQUIRED)
+add_executable(tokmon_package_consumer main.cpp)
+target_link_libraries(tokmon_package_consumer PRIVATE tokmon::snow)

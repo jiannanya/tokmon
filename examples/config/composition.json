@@ -1,0 +1,12 @@
+{
+  "schema": "org.tokmon.arche.composition/v1",
+  "id": "org.tokmon.snow.default",
+  "plugins": [
+    {"instance": "session", "package": "org.tokmon.snow.session.sqlite@1.0.0", "realm": "storage"},
+    {"instance": "storage", "package": "org.tokmon.snow.storage.default@1.0.0", "realm": "storage"},
+    {"instance": "model", "package": "org.tokmon.snow.model.configured@1.0.0", "realm": "model"},
+    {"instance": "tools", "package": "org.tokmon.snow.tools.default@1.0.0", "realm": "tools"},
+    {"instance": "policy", "package": "org.tokmon.snow.policy.default@1.0.0", "realm": "policy"},
+    {"instance": "agent", "package": "org.tokmon.snow.loop.direct@1.0.0", "realm": "agent"}
+  ]
+}

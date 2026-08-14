@@ -1,0 +1,25 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "tokmon",
+  "version-string": "0.1.0",
+  "description": "Arche-based composable native agent platform",
+  "dependencies": [
+    "nlohmann-json",
+    {
+      "name": "sqlite3",
+      "features": ["fts5", "json1"]
+    },
+    {
+      "name": "curl",
+      "features": ["ssl"]
+    },
+    "sdl3",
+    "lexbor",
+    "yoga",
+    {
+      "name": "skia",
+      "features": ["harfbuzz", "icu", "png"]
+    }
+  ]
+}
+

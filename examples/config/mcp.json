@@ -1,0 +1,18 @@
+{
+  "schema": "org.tokmon.snow.mcp/v1",
+  "servers": [
+    {
+      "id": "example",
+      "command": "node",
+      "args": ["path/to/server.mjs"],
+      "cwd": ".",
+      "request_timeout_ms": 30000,
+      "enabled": false,
+      "env": {
+        "EXAMPLE_TOKEN": {
+          "from_env": "EXAMPLE_TOKEN"
+        }
+      }
+    }
+  ]
+}

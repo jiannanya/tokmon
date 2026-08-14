@@ -1,0 +1,99 @@
+# CMake and generated build trees
+/build/
+/out/
+/cmake-build-*/
+/CMakeFiles/
+/CMakeCache.txt
+/cmake_install.cmake
+/CTestTestfile.cmake
+/Makefile
+/compile_commands.json
+/install_manifest.txt
+CMakeUserPresets.json
+
+# Dependency installations and package caches
+/vcpkg_installed/
+/.cache/
+/.packages/
+node_modules/
+
+# Compiler, linker, and test outputs
+*.obj
+*.o
+*.lo
+*.lib
+*.a
+*.dll
+*.so
+*.so.*
+*.dylib
+*.exe
+*.pdb
+*.ilk
+*.exp
+*.idb
+*.ipdb
+*.iobj
+*.tlog
+*.lastbuildstate
+*.gcda
+*.gcno
+*.profraw
+*.profdata
+Testing/
+test-results/
+coverage/
+
+# Snow and Tokmon local state. Configuration examples under examples/config
+# remain tracked; only the workspace-local runtime/config roots are ignored.
+/.snow/
+/.tokmon/
+*.db-wal
+*.db-shm
+*.sqlite-wal
+*.sqlite-shm
+
+# SDK/runtime caches
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+dist/
+
+# Local secrets and environment overrides
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# IDE and editor state
+/.vs/
+/.vscode/
+/.idea/
+*.user
+*.suo
+*.VC.db
+*.VC.opendb
+*.code-workspace
+*~
+*.swp
+*.swo
+
+# Logs, crash dumps, and temporary files
+*.log
+*.dmp
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+
+# Operating-system metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
