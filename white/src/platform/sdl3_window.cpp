@@ -6,9 +6,18 @@
 #include <SDL3/SDL_dialog.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <memory>
 #include <thread>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <SDL3/SDL_system.h>
+#endif
 
 namespace white {
 namespace {
@@ -113,6 +122,11 @@ Window::Window(WindowOptions options) : options_(std::move(options)) {
   if (!window_) {
     throw tokmon::Error("white.sdl.window", SDL_GetError());
   }
+#ifdef _WIN32
+  native_window_handle_ = SDL_GetPointerProperty(
+      SDL_GetWindowProperties(window_), SDL_PROP_WINDOW_WIN32_HWND_POINTER,
+      nullptr);
+#endif
   const auto initial_scale = window_units_per_logical_pixel(window_);
   if (std::abs(initial_scale - 1.0F) > 0.001F) {
     (void)SDL_SetWindowSize(window_,
@@ -144,6 +158,12 @@ Window::Window(WindowOptions options) : options_(std::move(options)) {
 }
 
 Window::~Window() {
+#ifdef _WIN32
+  if (windows_message_hook_installed_)
+    SDL_SetWindowsMessageHook(nullptr, nullptr);
+#endif
+  if (live_resize_watch_installed_)
+    SDL_RemoveEventWatch(&Window::live_resize_watch, this);
   if (window_) SDL_StopTextInput(window_);
   if (pointer_cursor_) SDL_DestroyCursor(pointer_cursor_);
   if (default_cursor_) SDL_DestroyCursor(default_cursor_);
@@ -385,8 +405,158 @@ void Window::sync_drawable_size() {
   texture_ = texture;
 }
 
+bool Window::live_resize_watch(void* userdata, SDL_Event* event) {
+  auto* owner = static_cast<Window*>(userdata);
+  if (!owner || !event || event->type != SDL_EVENT_WINDOW_EXPOSED ||
+      event->window.data1 != 1 ||
+      std::this_thread::get_id() != owner->run_thread_ ||
+      event->window.windowID != SDL_GetWindowID(owner->window_))
+    return true;
+#ifdef _WIN32
+  // Win32 is driven by actual size-change messages below. SDL's timer expose
+  // otherwise redraws continuously while the pointer is stationary and can
+  // starve the non-client sizing loop.
+  if (owner->windows_message_hook_installed_) return true;
+#endif
+  // SDL guarantees live-resize expose events originate on the main OS thread
+  // and explicitly permits drawing from an event watcher. Windows' modal
+  // sizing loop otherwise prevents Window::run() from reaching SDL_PollEvent.
+  try {
+    owner->render_live_resize();
+  } catch (...) {
+    // Never allow a C callback to unwind through SDL. The queued resize event
+    // will request a normal recovery frame when the modal loop yields.
+    owner->dirty_.store(true, std::memory_order_release);
+  }
+  return true;
+}
+
+void Window::begin_live_resize() {
+  if (live_resize_active_) return;
+  live_resize_active_ = true;
+  live_preview_width_ = 0;
+  live_preview_height_ = 0;
+  if (gl_context_)
+    (void)SDL_GL_SetSwapInterval(0);
+  else
+    (void)SDL_SetRenderVSync(renderer_, 0);
+  if (surface_) surface_->prepare_preview();
+}
+
+void Window::end_live_resize() {
+  if (!live_resize_active_) return;
+  if (gl_context_)
+    (void)SDL_GL_SetSwapInterval(1);
+  else
+    (void)SDL_SetRenderVSync(renderer_, 1);
+  live_resize_active_ = false;
+  live_preview_width_ = 0;
+  live_preview_height_ = 0;
+  dirty_.store(true, std::memory_order_release);
+}
+
+#ifdef _WIN32
+bool Window::windows_message_hook(void* userdata, MSG* message) {
+  auto* owner = static_cast<Window*>(userdata);
+  if (!owner || !message || message->hwnd != owner->native_window_handle_ ||
+      std::this_thread::get_id() != owner->run_thread_)
+    return true;
+
+  const auto resize_hit = [](WPARAM hit) {
+    return hit == HTLEFT || hit == HTRIGHT || hit == HTTOP ||
+           hit == HTBOTTOM || hit == HTTOPLEFT || hit == HTTOPRIGHT ||
+           hit == HTBOTTOMLEFT || hit == HTBOTTOMRIGHT;
+  };
+
+  switch (message->message) {
+  case WM_NCLBUTTONDOWN:
+    owner->native_resize_gesture_ = resize_hit(message->wParam);
+    if (owner->native_resize_gesture_) {
+      owner->begin_live_resize();
+
+      // SDL works around Windows' roughly 500 ms non-client drag startup wait
+      // for HTCAPTION, but not for custom resize edges. Queueing a zero-delta
+      // move wakes DefWindowProc's sizing loop before the physical pointer has
+      // crossed the system drag threshold, so the first pixel is observable.
+      POINT cursor{};
+      if (GetCursorPos(&cursor) && ScreenToClient(message->hwnd, &cursor)) {
+        (void)PostMessageW(message->hwnd, WM_MOUSEMOVE, 0,
+                           MAKELPARAM(cursor.x, cursor.y));
+      }
+    }
+    break;
+  case WM_WINDOWPOSCHANGED:
+    if (owner->native_resize_gesture_) {
+      try {
+        owner->render_live_resize();
+      } catch (...) {
+        owner->dirty_.store(true, std::memory_order_release);
+      }
+    }
+    break;
+  case WM_EXITSIZEMOVE:
+  case WM_CAPTURECHANGED:
+    if (owner->native_resize_gesture_) {
+      owner->native_resize_gesture_ = false;
+      owner->end_live_resize();
+    }
+    break;
+  default:
+    break;
+  }
+  return true;
+}
+#endif
+
+void Window::render_live_resize() {
+  if (!running_.load(std::memory_order_acquire)) return;
+  if (live_resize_rendering_.exchange(true, std::memory_order_acq_rel)) return;
+  struct RenderGuard {
+    std::atomic_bool& active;
+    ~RenderGuard() { active.store(false, std::memory_order_release); }
+  } guard{live_resize_rendering_};
+
+  begin_live_resize();
+
+  int pixel_width = 1;
+  int pixel_height = 1;
+  (void)SDL_GetWindowSizeInPixels(window_, &pixel_width, &pixel_height);
+  pixel_width = std::max(1, pixel_width);
+  pixel_height = std::max(1, pixel_height);
+  if (live_preview_width_ == pixel_width &&
+      live_preview_height_ == pixel_height)
+    return;
+
+  // Do not rebuild Yoga or allocate a 4K content surface inside Windows'
+  // sizing message. Presenting the retained frame scaled to the current
+  // framebuffer keeps the border attached to the pointer. The queued resize
+  // event performs one exact layout/raster pass after the modal loop exits.
+  if (gl_context_) {
+    surface_->present_preview(pixel_width, pixel_height);
+    (void)SDL_GL_SwapWindow(window_);
+  } else {
+    SDL_SetRenderDrawColor(renderer_, 247, 248, 250, 255);
+    SDL_RenderClear(renderer_);
+    SDL_RenderTexture(renderer_, texture_, nullptr, nullptr);
+    SDL_RenderPresent(renderer_);
+  }
+  live_preview_width_ = pixel_width;
+  live_preview_height_ = pixel_height;
+  dirty_.store(true, std::memory_order_release);
+}
+
 int Window::run() {
+  run_thread_ = std::this_thread::get_id();
   running_ = true;
+#ifdef _WIN32
+  if (native_window_handle_ && !windows_message_hook_installed_) {
+    SDL_SetWindowsMessageHook(&Window::windows_message_hook, this);
+    windows_message_hook_installed_ = true;
+  }
+#endif
+  if (!live_resize_watch_installed_)
+    live_resize_watch_installed_ =
+        SDL_AddEventWatch(&Window::live_resize_watch, this);
   auto next_caret = std::chrono::steady_clock::now() +
                     std::chrono::milliseconds(500);
   while (running_.load(std::memory_order_acquire)) {
@@ -400,6 +570,9 @@ int Window::run() {
       case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
       case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
       case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED: {
+        if (live_resize_active_) {
+          end_live_resize();
+        }
         sync_drawable_size();
         dirty_ = true;
         break;
@@ -487,6 +660,17 @@ int Window::run() {
     }
     SDL_Delay(rendered ? 1 : 8);
   }
+  if (live_resize_watch_installed_) {
+    SDL_RemoveEventWatch(&Window::live_resize_watch, this);
+    live_resize_watch_installed_ = false;
+  }
+  end_live_resize();
+#ifdef _WIN32
+  if (windows_message_hook_installed_) {
+    SDL_SetWindowsMessageHook(nullptr, nullptr);
+    windows_message_hook_installed_ = false;
+  }
+#endif
   return 0;
 }
 

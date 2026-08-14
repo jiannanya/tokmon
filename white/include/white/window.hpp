@@ -4,13 +4,13 @@
 #include <white/text_editor.hpp>
 
 #include <atomic>
-#include <chrono>
 #include <filesystem>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 struct SDL_Window;
@@ -18,6 +18,10 @@ struct SDL_Renderer;
 struct SDL_Texture;
 struct SDL_Cursor;
 struct SDL_GLContextState;
+union SDL_Event;
+#ifdef _WIN32
+struct tagMSG;
+#endif
 
 namespace white {
 
@@ -93,6 +97,13 @@ public:
   int run();
 
 private:
+  static bool live_resize_watch(void* userdata, SDL_Event* event);
+#ifdef _WIN32
+  static bool windows_message_hook(void* userdata, tagMSG* message);
+#endif
+  void begin_live_resize();
+  void end_live_resize();
+  void render_live_resize();
   void sync_drawable_size();
   void render();
   void handle_key(std::uint32_t key, std::uint16_t modifiers);
@@ -116,6 +127,17 @@ private:
   bool caret_phase_{true};
   std::atomic_bool running_{false};
   std::atomic_bool dirty_{true};
+  std::atomic_bool live_resize_rendering_{false};
+  bool live_resize_watch_installed_{false};
+  bool live_resize_active_{false};
+  std::thread::id run_thread_{};
+  int live_preview_width_{};
+  int live_preview_height_{};
+#ifdef _WIN32
+  void* native_window_handle_{nullptr};
+  bool windows_message_hook_installed_{false};
+  bool native_resize_gesture_{false};
+#endif
   float display_scale_{1};
   float window_to_logical_x_{1};
   float window_to_logical_y_{1};

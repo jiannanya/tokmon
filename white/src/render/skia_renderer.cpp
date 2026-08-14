@@ -8,6 +8,7 @@
 #include <include/core/SkImage.h>
 #include <include/core/SkPaint.h>
 #include <include/core/SkRRect.h>
+#include <include/core/SkSamplingOptions.h>
 #include <include/core/SkSurface.h>
 #include <include/core/SkFontMgr.h>
 #include <include/core/SkFontStyle.h>
@@ -61,6 +62,20 @@ sk_sp<skia::textlayout::FontCollection> font_collection() {
     return value;
   }();
   return collection;
+}
+
+sk_sp<SkSurface> wrap_gl_framebuffer(GrDirectContext* context, int width,
+                                     int height, int sample_count,
+                                     int stencil_bits) {
+  // GL_RGBA8. Keeping the framebuffer format at the API boundary avoids a
+  // dependency on Skia's private GrGLDefines header.
+  const GrGLFramebufferInfo framebuffer{0, 0x8058};
+  const auto target = GrBackendRenderTargets::MakeGL(
+      std::max(1, width), std::max(1, height), sample_count, stencil_bits,
+      framebuffer);
+  return SkSurfaces::WrapBackendRenderTarget(
+      context, target, kBottomLeft_GrSurfaceOrigin, kRGBA_8888_SkColorType,
+      nullptr, nullptr);
 }
 
 template <typename Value>
@@ -235,6 +250,9 @@ struct RasterSurface::Impl {
   sk_sp<GrDirectContext> gpu_context;
   sk_sp<SkSurface> surface;
   sk_sp<SkSurface> presentation_surface;
+  sk_sp<SkImage> preview_image;
+  int presentation_width{};
+  int presentation_height{};
   mutable std::vector<std::byte> readback;
   std::unordered_map<std::string, ParagraphEntry> paragraph_cache;
   std::unordered_map<const Document*, DocumentRenderState> documents;
@@ -288,15 +306,11 @@ void RasterSurface::resize(int width, int height, int pixel_width,
     impl_->surface = SkSurfaces::RenderTarget(
         impl_->gpu_context.get(), skgpu::Budgeted::kYes, image_info,
         impl_->sample_count, kTopLeft_GrSurfaceOrigin, nullptr);
-    // GL_RGBA8. Keeping the framebuffer format at the API boundary avoids a
-    // dependency on Skia's private GrGLDefines header.
-    const GrGLFramebufferInfo framebuffer{0, 0x8058};
-    const auto target = GrBackendRenderTargets::MakeGL(
-        impl_->pixel_width, impl_->pixel_height, impl_->sample_count,
-        impl_->stencil_bits, framebuffer);
-    impl_->presentation_surface = SkSurfaces::WrapBackendRenderTarget(
-        impl_->gpu_context.get(), target, kBottomLeft_GrSurfaceOrigin,
-        kRGBA_8888_SkColorType, nullptr, nullptr);
+    impl_->presentation_surface = wrap_gl_framebuffer(
+        impl_->gpu_context.get(), impl_->pixel_width, impl_->pixel_height,
+        impl_->sample_count, impl_->stencil_bits);
+    impl_->presentation_width = impl_->pixel_width;
+    impl_->presentation_height = impl_->pixel_height;
   } else {
     impl_->surface = SkSurfaces::Raster(
         SkImageInfo::MakeN32Premul(impl_->pixel_width, impl_->pixel_height));
@@ -314,6 +328,7 @@ void RasterSurface::resize(int width, int height, int pixel_width,
           static_cast<float>(impl_->height));
   impl_->documents.clear();
   impl_->readback.clear();
+  impl_->preview_image.reset();
 }
 
 void RasterSurface::clear(Color value) {
@@ -592,10 +607,42 @@ DamageRegion RasterSurface::frame_damage() const {
 
 void RasterSurface::flush() {
   if (!impl_->gpu_context) return;
+  impl_->preview_image.reset();
   const auto image = impl_->surface->makeImageSnapshot();
   auto* canvas = impl_->presentation_surface->getCanvas();
   canvas->clear(SK_ColorTRANSPARENT);
   canvas->drawImage(image, 0, 0);
+  impl_->gpu_context->flushAndSubmit(impl_->presentation_surface.get());
+}
+
+void RasterSurface::prepare_preview() {
+  if (impl_->gpu_context && !impl_->preview_image)
+    impl_->preview_image = impl_->surface->makeImageSnapshot();
+}
+
+void RasterSurface::present_preview(int pixel_width, int pixel_height) {
+  if (!impl_->gpu_context) return;
+  pixel_width = std::max(1, pixel_width);
+  pixel_height = std::max(1, pixel_height);
+  if (!impl_->presentation_surface ||
+      impl_->presentation_width != pixel_width ||
+      impl_->presentation_height != pixel_height) {
+    impl_->presentation_surface = wrap_gl_framebuffer(
+        impl_->gpu_context.get(), pixel_width, pixel_height,
+        impl_->sample_count, impl_->stencil_bits);
+    if (!impl_->presentation_surface)
+      throw std::runtime_error("failed to resize the OpenGL presentation surface");
+    impl_->presentation_width = pixel_width;
+    impl_->presentation_height = pixel_height;
+  }
+  prepare_preview();
+  auto* canvas = impl_->presentation_surface->getCanvas();
+  canvas->clear(SK_ColorTRANSPARENT);
+  canvas->drawImageRect(
+      impl_->preview_image,
+      SkRect::MakeWH(static_cast<float>(pixel_width),
+                     static_cast<float>(pixel_height)),
+      SkSamplingOptions(SkFilterMode::kLinear), nullptr);
   impl_->gpu_context->flushAndSubmit(impl_->presentation_surface.get());
 }
 

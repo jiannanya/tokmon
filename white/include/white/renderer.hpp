@@ -76,6 +76,13 @@ public:
   [[nodiscard]] DamageRegion frame_damage() const;
   // Submits pending Ganesh commands. It is a no-op for raster surfaces.
   void flush();
+  // Pins the last completed GPU frame before the native sizing loop starts so
+  // the first resize message never pays snapshot setup cost.
+  void prepare_preview();
+  // Presents the last completed GPU frame scaled to a temporary framebuffer
+  // size without reallocating or repainting the retained content surface.
+  // Used by native live-resize loops; it is a no-op for CPU surfaces.
+  void present_preview(int pixel_width, int pixel_height);
   [[nodiscard]] SurfaceBackend backend() const noexcept;
 
   [[nodiscard]] int width() const noexcept;

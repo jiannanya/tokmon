@@ -95,6 +95,11 @@ it and when it can remain deterministic.
   native painting and CPU texture uploads to those rectangles.
 - Pointer events are drained and coalesced before a frame, and unchanged hover
   regions do not schedule frames.
+- Windows border resizing is woken on the initial non-client edge press and
+  follows actual `WM_WINDOWPOSCHANGED` messages instead of a periodic timer.
+  Each change compositor-scales the pinned retained frame at low latency;
+  exact Yoga layout and high-resolution rasterization run once when the modal
+  resize ends. Other platforms retain the SDL live-resize expose fallback.
 - Normal desktop windows prefer Skia Ganesh/OpenGL. Unsupported, remote or
   headless environments automatically fall back to Skia raster plus SDL's
   accelerated presenter.
