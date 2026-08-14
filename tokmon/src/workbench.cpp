@@ -20,18 +20,21 @@ using white::Color;
 using white::Rect;
 using white::RasterSurface;
 
-constexpr Color canvas{247, 247, 246, 255};
-constexpr Color sidebar_background{244, 244, 243, 255};
-constexpr Color panel{255, 255, 255, 255};
-constexpr Color ink{32, 33, 36, 255};
-constexpr Color secondary{103, 105, 112, 255};
-constexpr Color muted{145, 147, 154, 255};
-constexpr Color hairline{228, 228, 226, 255};
-constexpr Color hover_fill{235, 235, 233, 255};
-constexpr Color hover_border{204, 205, 202, 255};
-constexpr Color selected_fill{229, 229, 227, 255};
-constexpr Color accent{20, 112, 226, 255};
-constexpr Color accent_hover{12, 91, 196, 255};
+// White's product skin intentionally uses a very small warm-neutral palette.
+// Hierarchy comes from spacing and typography; borders are reserved for actual
+// pane boundaries and interactive surfaces.
+constexpr Color canvas{245, 245, 243, 255};
+constexpr Color sidebar_background{241, 241, 239, 255};
+constexpr Color panel{253, 253, 252, 255};
+constexpr Color ink{29, 30, 33, 255};
+constexpr Color secondary{91, 93, 100, 255};
+constexpr Color muted{143, 145, 151, 255};
+constexpr Color hairline{225, 225, 222, 255};
+constexpr Color hover_fill{231, 231, 228, 255};
+constexpr Color hover_border{200, 201, 198, 255};
+constexpr Color selected_fill{224, 224, 221, 255};
+constexpr Color accent{54, 92, 205, 255};
+constexpr Color accent_hover{43, 77, 180, 255};
 constexpr Color success{20, 154, 74, 255};
 constexpr Color warning{238, 92, 34, 255};
 constexpr Color danger{210, 48, 54, 255};
@@ -384,11 +387,35 @@ void draw_icon(RasterSurface& surface, std::string_view name, float x, float y,
     surface.stroke_rect({x - 7, y - 6, 14, 11}, color, 1.3F, 3);
     surface.line(x - 3, y + 5, x - 6, y + 8, color, 1.3F);
   } else if (name == "branch") {
+    // Tokmon brand mark, kept identical to the supplied reference.
     surface.fill_circle(x - 4, y - 6, 2, color);
     surface.fill_circle(x + 5, y, 2, color);
     surface.fill_circle(x - 4, y + 6, 2, color);
     surface.line(x - 4, y - 4, x - 4, y + 4, color, 1.2F);
     surface.line(x - 2, y, x + 3, y, color, 1.2F);
+  } else if (name == "fork") {
+    // A duplicated session card and transfer arrow is intentionally unrelated
+    // to Tokmon's three-node brand mark.
+    surface.stroke_rect({x - 7, y - 7, 9, 10}, color, 1.2F, 2);
+    surface.stroke_rect({x + 1, y - 2, 8, 9}, color, 1.2F, 2);
+    surface.line(x - 4, y + 6, x + 4, y + 6, color, 1.25F);
+    surface.line(x + 4, y + 6, x + 1, y + 3, color, 1.25F);
+  } else if (name == "panel-left") {
+    surface.stroke_rect({x - 7, y - 6, 14, 12}, color, 1.2F, 2);
+    surface.line(x - 2, y - 5, x - 2, y + 5, color, 1.2F);
+  } else if (name == "panel-right") {
+    surface.stroke_rect({x - 7, y - 6, 14, 12}, color, 1.2F, 2);
+    surface.line(x + 2, y - 5, x + 2, y + 5, color, 1.2F);
+  } else if (name == "window-minimize") {
+    surface.line(x - 5, y + 3, x + 5, y + 3, color, 1.2F);
+  } else if (name == "window-maximize") {
+    surface.stroke_rect({x - 5, y - 5, 10, 10}, color, 1.15F, 1);
+  } else if (name == "window-restore") {
+    surface.stroke_rect({x - 3, y - 5, 8, 8}, color, 1.1F, 1);
+    surface.stroke_rect({x - 5, y - 3, 8, 8}, color, 1.1F, 1);
+  } else if (name == "window-close") {
+    surface.line(x - 4, y - 4, x + 4, y + 4, color, 1.2F);
+    surface.line(x + 4, y - 4, x - 4, y + 4, color, 1.2F);
   } else if (name == "plugin") {
     surface.stroke_rect({x - 5, y - 5, 10, 10}, color, 1.2F, 2);
     surface.line(x - 2, y - 8, x - 2, y - 5, color, 1.2F);
@@ -507,35 +534,55 @@ WorkbenchView::WorkbenchView(std::filesystem::path workspace)
 
 WorkbenchLayout WorkbenchView::layout(float width, float height) const {
   WorkbenchLayout result;
-  result.menu_bar = {0, 0, width, 38};
-  result.compact_sidebar = width < 850;
-  const float sidebar_width = result.compact_sidebar ? 68.0F : 232.0F;
-  result.sidebar = {0, 38, sidebar_width, std::max(0.0F, height - 38)};
-  const float body_x = sidebar_width + 10;
-  const float body_y = 46;
-  const float body_height = std::max(200.0F, height - body_y - 10);
-  const float available = std::max(320.0F, width - body_x - 10);
-  result.viewer_visible = width >= 1120;
-  const float conversation_width = result.viewer_visible
-                                       ? std::clamp(available * 0.43F, 500.0F,
-                                                    660.0F)
-                                       : available;
-  result.conversation = {body_x, body_y, conversation_width, body_height};
-  result.conversation_header = {body_x, body_y, conversation_width, 52};
-  result.composer = {body_x + 24, body_y + body_height - 104,
-                     conversation_width - 48, 84};
-  result.timeline = {body_x + 1, body_y + 53, conversation_width - 2,
-                     std::max(50.0F, result.composer.y - body_y - 66)};
+  result.menu_bar = {0, 0, width, 44};
+  result.compact_sidebar = width < 980 && !sidebar_manually_sized_;
+  const auto sidebar_content_reserve =
+      width >= 1160 && !viewer_collapsed_ ? 820.0F : 560.0F;
+  const auto expanded_sidebar =
+      std::clamp(sidebar_width_, 176.0F,
+                 std::max(176.0F, width - sidebar_content_reserve));
+  const float sidebar_width = sidebar_collapsed_
+                                  ? 0.0F
+                                  : (result.compact_sidebar ? 72.0F
+                                                            : expanded_sidebar);
+  result.sidebar = {0, 44, sidebar_width, std::max(0.0F, height - 44)};
+  if (sidebar_width > 0)
+    result.sidebar_splitter = {sidebar_width - 3, 44, 6,
+                               std::max(0.0F, height - 44)};
+  const float body_x = sidebar_width;
+  const float body_y = 44;
+  const float body_height = std::max(200.0F, height - body_y);
+  const float available = std::max(320.0F, width - body_x);
+  result.viewer_visible = width >= 1160 && !viewer_collapsed_;
+  float conversation_width = available;
   if (result.viewer_visible) {
-    result.viewer = {body_x + conversation_width + 10, body_y,
-                     available - conversation_width - 10, body_height};
+    if (viewer_manually_sized_) {
+      const auto max_viewer = std::max(320.0F, available - 500.0F);
+      const auto actual_viewer =
+          std::clamp(viewer_width_, 320.0F, max_viewer);
+      conversation_width = available - actual_viewer;
+    } else {
+      conversation_width =
+          std::clamp(available * 0.49F, 560.0F, 720.0F);
+    }
+  }
+  result.conversation = {body_x, body_y, conversation_width, body_height};
+  result.conversation_header = {body_x, body_y, conversation_width, 58};
+  result.composer = {body_x + 28, body_y + body_height - 112,
+                     conversation_width - 56, 88};
+  result.timeline = {body_x + 1, body_y + 59, conversation_width - 2,
+                     std::max(50.0F, result.composer.y - body_y - 72)};
+  if (result.viewer_visible) {
+    result.viewer = {body_x + conversation_width, body_y,
+                     available - conversation_width, body_height};
+    result.viewer_splitter = {result.viewer.x - 3, body_y, 6, body_height};
     result.viewer_header = {result.viewer.x, result.viewer.y,
-                            result.viewer.width, 86};
+                            result.viewer.width, 92};
     const float explorer_width =
-        std::clamp(result.viewer.width * 0.28F, 190.0F, 250.0F);
-    result.document = {result.viewer.x + 1, result.viewer.y + 87,
+        std::clamp(result.viewer.width * 0.29F, 196.0F, 248.0F);
+    result.document = {result.viewer.x + 1, result.viewer.y + 93,
                        result.viewer.width - explorer_width - 2,
-                       result.viewer.height - 88};
+                       result.viewer.height - 94};
     result.explorer = {result.document.x + result.document.width,
                        result.document.y, explorer_width,
                        result.document.height};
@@ -708,6 +755,7 @@ void WorkbenchView::draw(RasterSurface& surface,
   const float height = static_cast<float>(surface.height());
   last_layout_ = layout(width, height);
   hits_.clear();
+  open_menu_bounds_ = {};
   if (frame.file_filter != last_filter_) {
     last_filter_ = frame.file_filter;
     refresh_files(last_filter_);
@@ -739,163 +787,217 @@ void WorkbenchView::draw(RasterSurface& surface,
     add_hit(bounds, action);
   };
 
-  // Application menu bar.
-  surface.fill_rect(last_layout_.menu_bar, {248, 248, 247, 255});
-  surface.line(0, 37.5F, width, 37.5F, hairline);
-  draw_icon(surface, "branch", 19, 19, secondary);
-  label(surface, "Tokmon", {38, 10, 58, 22}, 12, secondary, 500);
-  label(surface, "文件", {112, 10, 38, 22}, 12, secondary);
-  label(surface, "编辑", {162, 10, 38, 22}, 12, secondary);
-  label(surface, "视图", {212, 10, 38, 22}, 12, secondary);
-  label(surface, "帮助", {262, 10, 38, 22}, 12, secondary);
-  constexpr Rect menu_items[] = {{102, 4, 46, 30}, {152, 4, 46, 30},
-                                 {202, 4, 46, 30}, {252, 4, 46, 30}};
-  constexpr WorkbenchActionKind menu_actions[] = {
-      WorkbenchActionKind::new_session, WorkbenchActionKind::focus_message,
-      WorkbenchActionKind::inspect_composition, WorkbenchActionKind::show_help};
+  // Quiet application bar: one brand mark, low-contrast commands and a single
+  // runtime signal. The bar anchors the workspace without competing with it.
+  surface.fill_rect(last_layout_.menu_bar, panel);
+  surface.line(0, 43.5F, width, 43.5F, hairline);
+  draw_icon(surface, "branch", 19, 22, secondary);
+  label(surface, "Tokmon", {37, 12, 58, 22}, 12, ink, 650);
+  constexpr Rect menu_items[] = {{102, 7, 46, 30}, {152, 7, 46, 30},
+                                 {202, 7, 46, 30}, {252, 7, 46, 30}};
+  constexpr std::string_view menu_ids[] = {"file", "edit", "view", "help"};
   for (std::size_t index = 0; index < std::size(menu_items); ++index) {
-    if (hovered(menu_items[index]))
+    if (hovered(menu_items[index]) || active_menu_ == menu_ids[index])
       surface.fill_rect(menu_items[index], hover_fill, 6);
   }
-  // Redraw labels over the hover fill so the menu remains crisp.
-  label(surface, "文件", {112, 10, 38, 22}, 12, secondary);
-  label(surface, "编辑", {162, 10, 38, 22}, 12, secondary);
-  label(surface, "视图", {212, 10, 38, 22}, 12, secondary);
-  label(surface, "帮助", {262, 10, 38, 22}, 12, secondary);
+  label(surface, "文件", {112, 13, 38, 22}, 11, secondary, 450);
+  label(surface, "编辑", {162, 13, 38, 22}, 11, secondary, 450);
+  label(surface, "视图", {212, 13, 38, 22}, 11, secondary, 450);
+  label(surface, "帮助", {262, 13, 38, 22}, 11, secondary, 450);
   for (std::size_t index = 0; index < std::size(menu_items); ++index)
-    add_hit(menu_items[index], menu_actions[index]);
-  const auto runtime_text = frame.snow_connected ? "Snow 在线" : "Snow 离线";
-  surface.fill_circle(width - 104, 19, 4,
+    hits_.push_back({menu_items[index], WorkbenchActionKind::toggle_menu, {},
+                     std::string(menu_ids[index])});
+  const Rect toggle_left{310, 7, 30, 30};
+  if (hovered(toggle_left)) surface.fill_rect(toggle_left, hover_fill, 7);
+  draw_icon(surface, "panel-left", toggle_left.x + 15, toggle_left.y + 15,
+            sidebar_collapsed_ ? accent : secondary);
+  add_hit(toggle_left, WorkbenchActionKind::toggle_left_panel);
+  const Rect toggle_right{width - 310, 7, 30, 30};
+  if (hovered(toggle_right)) surface.fill_rect(toggle_right, hover_fill, 7);
+  draw_icon(surface, "panel-right", toggle_right.x + 15,
+            toggle_right.y + 15,
+            viewer_collapsed_ ? accent : secondary);
+  add_hit(toggle_right, WorkbenchActionKind::toggle_right_panel);
+  const auto runtime_text = frame.snow_connected ? "Snow 已连接" : "Snow 离线";
+  surface.fill_circle(width - 260, 22, 3.5F,
                       frame.snow_connected ? success : danger);
-  label(surface, runtime_text, {width - 94, 10, 76, 20}, 11, secondary);
+  label(surface, runtime_text, {width - 250, 13, 112, 20}, 10, secondary, 500);
+  const Rect minimize{width - 126, 0, 42, 43};
+  const Rect maximize{width - 84, 0, 42, 43};
+  const Rect window_close_bounds{width - 42, 0, 42, 43};
+  if (hovered(minimize)) surface.fill_rect(minimize, hover_fill);
+  if (hovered(maximize)) surface.fill_rect(maximize, hover_fill);
+  if (hovered(window_close_bounds))
+    surface.fill_rect(window_close_bounds, {225, 75, 75, 255});
+  draw_icon(surface, "window-minimize", minimize.x + 21, 21, secondary);
+  draw_icon(surface, frame.window_maximized ? "window-restore"
+                                            : "window-maximize",
+            maximize.x + 21, 21, secondary);
+  draw_icon(surface, "window-close", window_close_bounds.x + 21, 21,
+            hovered(window_close_bounds) ? Color{255, 255, 255, 255}
+                                         : secondary);
+  add_hit(minimize, WorkbenchActionKind::window_minimize);
+  add_hit(maximize, WorkbenchActionKind::window_toggle_maximize);
+  add_hit(window_close_bounds, WorkbenchActionKind::window_close);
 
-  // Sidebar: product navigation and current workspace.
+  // Sidebar: one primary action, three destinations and recent context.
+  if (last_layout_.sidebar.width > 0) {
   surface.fill_rect(last_layout_.sidebar, sidebar_background);
-  surface.line(last_layout_.sidebar.width - 0.5F, 38,
+  surface.line(last_layout_.sidebar.width - 0.5F, 44,
                last_layout_.sidebar.width - 0.5F, height, hairline);
   const float side_x = last_layout_.sidebar.x;
   const bool compact = last_layout_.compact_sidebar;
   if (!compact) {
-    label(surface, "Tokmon", {side_x + 16, 53, 120, 26}, 18, ink, 650);
-    label(surface, "Arche Agent OS", {side_x + 16, 77, 130, 18}, 10,
-          muted, 500);
-    const Rect sidebar_search{side_x + 186, 51, 30, 30};
+    label(surface, "工作空间", {side_x + 16, 60, 90, 18}, 10, muted, 650);
+    label(surface, workspace_.filename().string(),
+          {side_x + 16, 79, 166, 23}, 13, ink, 600);
+    const Rect sidebar_search{side_x + 182, 65, 30, 30};
     if (hovered(sidebar_search))
       surface.fill_rect(sidebar_search, hover_fill, 7);
-    draw_icon(surface, "search", side_x + 201, 67, secondary);
+    draw_icon(surface, "search", side_x + 197, 80, secondary);
     add_hit(sidebar_search, WorkbenchActionKind::focus_filter);
   } else {
-    surface.fill_circle(side_x + 34, 66, 16, {42, 44, 48, 255});
-    label(surface, "T", {side_x + 22, 54, 24, 24}, 14,
+    surface.fill_circle(side_x + 36, 72, 15, ink);
+    label(surface, "T", {side_x + 24, 60, 24, 24}, 13,
           {255, 255, 255, 255}, 700, 1, white::TextAlign::center);
   }
+
+  const Rect create{side_x + 12, 108, last_layout_.sidebar.width - 24, 38};
+  surface.fill_rect(create,
+                    hovered(create) ? Color{49, 51, 56, 255} : ink, 10);
+  draw_icon(surface, "plus", compact ? side_x + 36 : side_x + 29,
+            create.y + 19, {255, 255, 255, 255});
+  if (!compact)
+    label(surface, "新建会话", {side_x + 48, create.y + 9, 120, 20}, 12,
+          {255, 255, 255, 255}, 600);
+  add_hit(create, WorkbenchActionKind::new_session);
 
   struct NavItem {
     std::string_view icon;
     std::string_view label;
     WorkbenchActionKind action;
   };
-  constexpr NavItem nav[] = {{"plus", "新会话", WorkbenchActionKind::new_session},
-                             {"chat", "会话", WorkbenchActionKind::redraw},
+  constexpr NavItem nav[] = {{"chat", "会话", WorkbenchActionKind::redraw},
                              {"plugin", "插件", WorkbenchActionKind::inspect_composition},
                              {"pulse", "诊断", WorkbenchActionKind::diagnostics}};
-  float nav_y = 108;
-  for (const auto& item : nav) {
+  float nav_y = 156;
+  for (std::size_t index = 0; index < std::size(nav); ++index) {
+    const auto& item = nav[index];
     const Rect row{side_x + 8, nav_y, last_layout_.sidebar.width - 16, 34};
-    if (hovered(row)) surface.fill_rect(row, hover_fill, 7);
-    draw_icon(surface, item.icon, compact ? side_x + 34 : side_x + 22,
+    if (index == 0 || hovered(row))
+      surface.fill_rect(row,
+                        hovered(row) ? hover_fill : Color{235, 235, 232, 255},
+                        8);
+    draw_icon(surface, item.icon, compact ? side_x + 36 : side_x + 24,
               nav_y + 17, secondary);
     if (!compact)
-      label(surface, item.label, {side_x + 40, nav_y + 8, 146, 20}, 13,
-            ink, 450);
+      label(surface, item.label, {side_x + 44, nav_y + 8, 146, 20}, 12,
+            index == 0 ? ink : secondary, index == 0 ? 600 : 500);
     add_hit(row, item.action);
-    nav_y += 38;
+    nav_y += 37;
   }
 
   if (!compact) {
-    label(surface, "工作区", {side_x + 16, 270, 80, 18}, 11, muted, 600);
-    draw_icon(surface, "folder", side_x + 23, 304, secondary);
-    label(surface, workspace_.filename().string(),
-          {side_x + 40, 294, 170, 22}, 13, ink, 500);
-    const Rect selected{side_x + 8, 322, last_layout_.sidebar.width - 16, 42};
-    surface.fill_rect(selected,
-                      hovered(selected) ? Color{220, 220, 218, 255}
-                                        : selected_fill,
-                      8);
-    draw_icon(surface, "chat", side_x + 24, 343, ink);
-    label(surface, normalized_title(frame),
-          {side_x + 42, 332, selected.width - 50, 24}, 12, ink, 500);
-    hits_.push_back({selected, WorkbenchActionKind::switch_session, {},
-                     frame.session_id});
-    float recent_y = 368;
-    std::size_t recent_count = 0;
+    label(surface, "会话", {side_x + 16, 279, 80, 18}, 10, muted, 650);
+    const Rect session_area{side_x + 8, 301,
+                            last_layout_.sidebar.width - 16,
+                            std::max(40.0F, height - 443.0F)};
+    session_max_scroll_ = std::max(
+        0.0F, static_cast<float>(frame.sessions.size()) * 36.0F -
+                  session_area.height);
+    session_scroll_ =
+        std::clamp(session_scroll_, 0.0F, session_max_scroll_);
+    surface.push_clip(session_area);
+    float session_y = session_area.y - session_scroll_;
+    if (frame.sessions.empty())
+      label(surface, "暂无会话", {session_area.x + 8, session_y + 8,
+                                  session_area.width - 16, 20},
+            11, muted, 450);
     for (const auto& session : frame.sessions) {
-      if (session.id == frame.session_id || recent_count >= 3) continue;
-      const Rect row{side_x + 13, recent_y, last_layout_.sidebar.width - 25,
-                     28};
-      if (hovered(row)) surface.fill_rect(row, hover_fill, 6);
-      draw_icon(surface, "chat", side_x + 28, recent_y + 14, muted);
+      const Rect row{session_area.x, session_y, session_area.width, 32};
+      const bool selected = session.id == frame.session_id;
+      if (selected || hovered(row))
+        surface.fill_rect(row,
+                          selected ? selected_fill : hover_fill, 8);
+      draw_icon(surface, "chat", row.x + 16, row.y + 16,
+                selected ? ink : muted);
       label(surface, session.title,
-            {side_x + 44, recent_y + 5, row.width - 38, 19}, 11,
-            session.closed ? muted : secondary, 450);
-      hits_.push_back({row, WorkbenchActionKind::switch_session, {},
-                       session.id});
-      recent_y += 30;
-      ++recent_count;
+            {row.x + 35, row.y + 6, row.width - 43, 20}, 11,
+            session.closed ? muted : (selected ? ink : secondary),
+            selected ? 600 : 450);
+      if (row.y + row.height > session_area.y &&
+          row.y < session_area.y + session_area.height)
+        hits_.push_back({row, WorkbenchActionKind::switch_session, {},
+                         session.id});
+      session_y += 36;
+    }
+    surface.pop_clip();
+    if (session_max_scroll_ > 0) {
+      const float ratio = session_area.height /
+                          (session_area.height + session_max_scroll_);
+      const float thumb = std::max(24.0F, session_area.height * ratio);
+      const float progress = session_scroll_ / session_max_scroll_;
+      surface.fill_rect({session_area.x + session_area.width - 3,
+                         session_area.y +
+                             (session_area.height - thumb) * progress,
+                         2, thumb},
+                        {168, 169, 166, 145}, 2);
     }
 
-    const float runtime_y = recent_y + 10;
-    label(surface, "运行时", {side_x + 16, runtime_y, 80, 18}, 11, muted, 600);
-    constexpr std::string_view components[] = {"Arche 微内核", "Snow Agent",
-                                                "White UI", "Axon Signals"};
-    float component_y = runtime_y + 26;
-    for (const auto component : components) {
-      surface.fill_circle(side_x + 24, component_y + 9, 3,
-                          component.starts_with("Snow") &&
-                                  !frame.snow_connected
-                              ? danger
-                              : success);
-      label(surface, component, {side_x + 40, component_y, 165, 20}, 12,
-            secondary);
-      component_y += 29;
-    }
+    const Rect runtime{side_x + 12, height - 126,
+                       last_layout_.sidebar.width - 24, 46};
+    surface.fill_rect(runtime, {247, 247, 245, 255}, 10);
+    surface.fill_circle(runtime.x + 15, runtime.y + 16, 3.5F,
+                        frame.snow_connected ? success : danger);
+    label(surface, frame.snow_connected ? "Arche 系统就绪" : "Snow 未连接",
+          {runtime.x + 27, runtime.y + 7, runtime.width - 35, 19}, 11, ink,
+          600);
+    label(surface, "4 个运行时服务", {runtime.x + 27, runtime.y + 24,
+                                      runtime.width - 35, 17},
+          9, muted, 500);
 
     const float footer_y = height - 66;
-    surface.line(side_x + 12, footer_y - 8,
-                 last_layout_.sidebar.width - 12, footer_y - 8, hairline);
-    surface.fill_circle(side_x + 25, footer_y + 13, 13,
-                        {34, 126, 171, 255});
-    label(surface, "T", {side_x + 15, footer_y + 4, 20, 20}, 10,
+    surface.fill_circle(side_x + 25, footer_y + 16, 13,
+                        {42, 103, 145, 255});
+    label(surface, "T", {side_x + 15, footer_y + 7, 20, 20}, 10,
           {255, 255, 255, 255}, 700, 1, white::TextAlign::center);
-    label(surface, "Tokmon User", {side_x + 46, footer_y + 3, 120, 20},
-          12, ink, 500);
+    label(surface, "Tokmon User", {side_x + 46, footer_y + 6, 120, 20},
+          11, ink, 600);
     label(surface,
           "epoch " + std::to_string(frame.composition_epoch) + " · seq " +
               std::to_string(frame.trajectory_cursor),
-          {side_x + 46, footer_y + 21, 150, 18}, 10, muted);
+          {side_x + 46, footer_y + 24, 150, 18}, 9, muted, 500);
+  } else {
+    session_scroll_ = 0;
+    session_max_scroll_ = 0;
+    surface.fill_circle(side_x + 36, height - 42, 12,
+                        frame.snow_connected ? success : danger);
+  }
   }
 
   // Conversation panel and header.
   const auto& conversation = last_layout_.conversation;
-  surface.fill_rect(conversation, panel, 12);
-  surface.stroke_rect(conversation, hairline, 1, 12);
-  surface.line(conversation.x, conversation.y + 52, conversation.x +
+  surface.fill_rect(conversation, panel);
+  surface.line(conversation.x + conversation.width - 0.5F, conversation.y,
+               conversation.x + conversation.width - 0.5F,
+               conversation.y + conversation.height, hairline);
+  surface.line(conversation.x, conversation.y + 58, conversation.x +
                    conversation.width,
-               conversation.y + 52, hairline);
-  draw_icon(surface, "folder", conversation.x + 22,
-            conversation.y + 26, secondary);
+               conversation.y + 58, hairline);
+  surface.fill_circle(conversation.x + 25, conversation.y + 29, 3.5F,
+                      frame.turn_active ? accent : success);
   label(surface, normalized_title(frame),
-        {conversation.x + 40, conversation.y + 14,
+        {conversation.x + 38, conversation.y + 17,
          conversation.width - 210, 25},
-        13, ink, 600);
+        13, ink, 650);
   const Rect fork_button{conversation.x + conversation.width - 104,
-                         conversation.y + 11, 32, 30};
+                         conversation.y + 14, 32, 30};
   if (hovered(fork_button)) surface.fill_rect(fork_button, hover_fill, 7);
-  draw_icon(surface, "branch", fork_button.x + 16, fork_button.y + 15,
+  draw_icon(surface, "fork", fork_button.x + 16, fork_button.y + 15,
             secondary);
   add_hit(fork_button, WorkbenchActionKind::fork_session);
   const Rect inspect_button{conversation.x + conversation.width - 64,
-                            conversation.y + 11, 32, 30};
+                            conversation.y + 14, 32, 30};
   if (hovered(inspect_button))
     surface.fill_rect(inspect_button, hover_fill, 7);
   label(surface, "•••", {inspect_button.x, inspect_button.y + 5,
@@ -959,7 +1061,7 @@ void WorkbenchView::draw(RasterSurface& surface,
           const float bubble_height = 22.0F + static_cast<float>(rows) * 21.0F;
           const Rect bubble{timeline.x + timeline.width - bubble_width - 24,
                             item_y, bubble_width, bubble_height};
-          surface.fill_rect(bubble, {243, 243, 242, 255}, 14);
+          surface.fill_rect(bubble, {239, 240, 238, 255}, 15);
           label(surface, item.content,
                 {bubble.x + 14, bubble.y + 10, bubble.width - 28,
                  bubble.height - 17},
@@ -1051,13 +1153,16 @@ void WorkbenchView::draw(RasterSurface& surface,
 
   // Composer. White owns the actual editor; this is its product projection.
   const auto& composer = last_layout_.composer;
-  surface.fill_rect({composer.x + 1, composer.y + 3, composer.width,
+  surface.fill_rect({composer.x + 1, composer.y + 5, composer.width,
                      composer.height},
-                    {225, 225, 223, 95}, 13);
-  surface.fill_rect(composer, panel, 13);
-  surface.stroke_rect(composer, {215, 215, 212, 255}, 1, 13);
+                    {70, 72, 78, 28}, 15);
+  surface.fill_rect(composer, {255, 255, 254, 255}, 15);
+  surface.stroke_rect(composer,
+                      frame.message_focused ? Color{199, 208, 230, 255}
+                                            : Color{215, 215, 212, 255},
+                      frame.message_focused ? 1.2F : 1.0F, 15);
   const Rect message_editor{composer.x + 16, composer.y + 12,
-                            composer.width - 32, 38};
+                            composer.width - 32, 40};
   message_editor_bounds_ = message_editor;
   message_editor_text_ = frame.message_input;
   if (frame.message_input.empty()) {
@@ -1073,35 +1178,33 @@ void WorkbenchView::draw(RasterSurface& surface,
                      frame.selection_end, frame.message_focused,
                      frame.caret_visible);
   }
-  const Rect attach{composer.x + 12, composer.y + 51, 26, 24};
+  const Rect attach{composer.x + 12, composer.y + 55, 26, 24};
   if (hovered(attach)) surface.fill_rect(attach, hover_fill, 7);
   draw_icon(surface, "plus", attach.x + 13, attach.y + 12, secondary);
   add_hit(attach, WorkbenchActionKind::attach_files);
-  const Rect access{composer.x + 46, composer.y + 52, 72, 23};
-  surface.fill_rect(access, {255, 246, 239, 255}, 7);
-  surface.stroke_rect(access, {250, 203, 177, 255}, 1, 7);
-  surface.fill_circle(access.x + 11, access.y + 11.5F, 4, warning);
-  label(surface, "完全访问", {access.x + 20, access.y + 4, 46, 18}, 10,
-        warning, 600);
+  const Rect access{composer.x + 47, composer.y + 56, 72, 22};
+  surface.fill_circle(access.x + 6, access.y + 11, 3, warning);
+  label(surface, "完全访问", {access.x + 14, access.y + 3, 50, 18}, 9,
+        secondary, 600);
   const auto model = frame.model.empty() ? "默认模型" : frame.model;
-  label(surface, model, {composer.x + composer.width - 170, composer.y + 57,
+  label(surface, model, {composer.x + composer.width - 170, composer.y + 61,
                          116, 18},
-        10, secondary, 500, 1, white::TextAlign::right);
-  const Rect send{composer.x + composer.width - 40, composer.y + 48, 30, 30};
-  surface.fill_circle(send.x + 15, send.y + 15, 15,
+        9, muted, 550, 1, white::TextAlign::right);
+  const Rect send{composer.x + composer.width - 42, composer.y + 52, 32, 32};
+  surface.fill_circle(send.x + 16, send.y + 16, 15,
                       frame.turn_active
                           ? (hovered(send) ? Color{242, 211, 211, 255}
                                            : Color{249, 232, 232, 255})
                           : (hovered(send) ? accent_hover
                                            : Color{65, 67, 72, 255}));
-  draw_icon(surface, frame.turn_active ? "stop" : "send", send.x + 15,
-            send.y + 15,
+  draw_icon(surface, frame.turn_active ? "stop" : "send", send.x + 16,
+            send.y + 16,
             frame.turn_active ? danger : Color{255, 255, 255, 255});
   add_hit(send, frame.turn_active ? WorkbenchActionKind::cancel_turn
                                   : WorkbenchActionKind::submit_input);
   if (!frame.attachments.empty()) {
     float attachment_x = composer.x + 8;
-    const float attachment_y = composer.y - 28;
+    const float attachment_y = composer.y - 29;
     for (std::size_t index = 0;
          index < frame.attachments.size() && index < 4; ++index) {
       const auto& attachment = frame.attachments[index];
@@ -1164,10 +1267,11 @@ void WorkbenchView::draw(RasterSurface& surface,
   // File/document viewer, matching the reference's docked inspector.
   if (last_layout_.viewer_visible) {
     const auto& viewer = last_layout_.viewer;
-    surface.fill_rect(viewer, panel, 12);
-    surface.stroke_rect(viewer, hairline, 1, 12);
-    surface.line(viewer.x, viewer.y + 44, viewer.x + viewer.width,
-                 viewer.y + 44, hairline);
+    surface.fill_rect(viewer, panel);
+    surface.line(viewer.x, viewer.y, viewer.x,
+                 viewer.y + viewer.height, hairline);
+    surface.line(viewer.x, viewer.y + 48, viewer.x + viewer.width,
+                 viewer.y + 48, hairline);
     float tab_x = viewer.x + 14;
     const float available_tabs = viewer.width - 68;
     const auto visible_tabs =
@@ -1177,7 +1281,7 @@ void WorkbenchView::draw(RasterSurface& surface,
     for (std::size_t index = 0;
          index < open_documents_.size() && index < 3; ++index) {
       const auto& document = open_documents_[index];
-      const Rect tab{tab_x, viewer.y + 8, tab_width, 30};
+      const Rect tab{tab_x, viewer.y + 9, tab_width, 32};
       const auto selected = document == selected_document_;
       if (selected || hovered(tab)) {
         const auto tab_fill = selected
@@ -1202,22 +1306,22 @@ void WorkbenchView::draw(RasterSurface& surface,
                        false, true});
       tab_x += tab_width + 4;
     }
-    const Rect add_tab{tab_x + 3, viewer.y + 8, 28, 30};
+    const Rect add_tab{tab_x + 3, viewer.y + 10, 28, 30};
     if (hovered(add_tab)) surface.fill_rect(add_tab, hover_fill, 7);
     label(surface, "+", {add_tab.x, add_tab.y + 5, add_tab.width, 20}, 16,
           muted, 400, 1, white::TextAlign::center);
     add_hit(add_tab, WorkbenchActionKind::open_file_dialog);
-    surface.line(viewer.x, viewer.y + 85, viewer.x + viewer.width,
-                 viewer.y + 85, hairline);
+    surface.line(viewer.x, viewer.y + 92, viewer.x + viewer.width,
+                 viewer.y + 92, hairline);
     label(surface, workspace_.filename().string() + "  ›  " +
                        selected_document_.generic_string(),
-          {viewer.x + 16, viewer.y + 56, viewer.width - 170, 20}, 11,
+          {viewer.x + 18, viewer.y + 62, viewer.width - 170, 20}, 10,
           secondary, 450);
-    const Rect inspect{viewer.x + viewer.width - 140, viewer.y + 52, 122, 27};
+    const Rect inspect{viewer.x + viewer.width - 140, viewer.y + 57, 122, 27};
     if (hovered(inspect)) surface.fill_rect(inspect, hover_fill, 7);
     label(surface, "查看 Arche 状态",
           {inspect.x + 5, inspect.y + 5, inspect.width - 10, 18}, 11, ink,
-          500, 1, white::TextAlign::center);
+          550, 1, white::TextAlign::center);
     add_hit(inspect, WorkbenchActionKind::inspect_composition);
 
     const auto& doc = last_layout_.document;
@@ -1357,10 +1461,112 @@ void WorkbenchView::draw(RasterSurface& surface,
       file_y += 26;
     }
   }
+
+  // Resize affordances sit above pane content. A six-pixel hit strip keeps
+  // dragging easy while the visible divider remains a quiet one-pixel line.
+  if (last_layout_.sidebar_splitter.width > 0) {
+    const auto& splitter = last_layout_.sidebar_splitter;
+    if (hovered(splitter) || resizing_sidebar_)
+      surface.fill_rect({splitter.x + 2, splitter.y, 2, splitter.height},
+                        {82, 115, 211, 190});
+  }
+  if (last_layout_.viewer_splitter.width > 0) {
+    const auto& splitter = last_layout_.viewer_splitter;
+    if (hovered(splitter) || resizing_viewer_)
+      surface.fill_rect({splitter.x + 2, splitter.y, 2, splitter.height},
+                        {82, 115, 211, 190});
+  }
+
+  // Native-style application menus are projected by White so every entry is
+  // testable and wired to the same action system as the rest of the workbench.
+  if (!active_menu_.empty()) {
+    struct MenuEntry {
+      std::string label;
+      WorkbenchActionKind action;
+      std::string value;
+      std::string hint;
+    };
+    std::vector<MenuEntry> entries;
+    float menu_x = 102;
+    if (active_menu_ == "file") {
+      entries = {{"新建会话", WorkbenchActionKind::new_session, {}, {}},
+                 {"打开工作区文件", WorkbenchActionKind::open_file_dialog,
+                  {}, {}},
+                 {"添加附件", WorkbenchActionKind::attach_files, {}, {}}};
+    } else if (active_menu_ == "edit") {
+      menu_x = 152;
+      entries = {{"聚焦输入框", WorkbenchActionKind::focus_message, {}, {}},
+                 {"清空输入", WorkbenchActionKind::set_message_input, {}, {}}};
+      for (const auto& item : std::views::reverse(frame.items)) {
+        if (item.kind == ItemKind::user) {
+          entries.push_back({"编辑上一条消息",
+                             WorkbenchActionKind::set_message_input,
+                             item.content, {}});
+          break;
+        }
+      }
+      for (const auto& item : std::views::reverse(frame.items)) {
+        if (item.kind == ItemKind::assistant) {
+          entries.push_back({"复制上一条回复", WorkbenchActionKind::copy_text,
+                             item.content, {}});
+          break;
+        }
+      }
+    } else if (active_menu_ == "view") {
+      menu_x = 202;
+      entries = {{sidebar_collapsed_ ? "展开会话栏" : "折叠会话栏",
+                  WorkbenchActionKind::toggle_left_panel, {}, {}},
+                 {viewer_collapsed_ ? "展开工作区" : "折叠工作区",
+                  WorkbenchActionKind::toggle_right_panel, {}, {}},
+                 {"查看 Arche 状态",
+                  WorkbenchActionKind::inspect_composition, {}, {}}};
+    } else if (active_menu_ == "help") {
+      menu_x = 252;
+      entries = {{"命令与快捷方式", WorkbenchActionKind::show_help, {}, {}},
+                 {"运行诊断", WorkbenchActionKind::diagnostics, {}, {}},
+                 {"查看组合状态", WorkbenchActionKind::inspect_composition,
+                  {}, {}}};
+    }
+    if (!entries.empty()) {
+      const float menu_width = 210;
+      const Rect menu{menu_x, 42, menu_width,
+                      12.0F + static_cast<float>(entries.size()) * 34.0F};
+      open_menu_bounds_ = menu;
+      surface.fill_rect({menu.x + 3, menu.y + 5, menu.width, menu.height},
+                        {42, 43, 48, 28}, 10);
+      surface.fill_rect(menu, {255, 255, 254, 255}, 10);
+      surface.stroke_rect(menu, {214, 214, 211, 255}, 1, 10);
+      float row_y = menu.y + 6;
+      for (const auto& entry : entries) {
+        const Rect row{menu.x + 6, row_y, menu.width - 12, 30};
+        if (hovered(row)) surface.fill_rect(row, hover_fill, 7);
+        label(surface, entry.label,
+              {row.x + 10, row.y + 6, row.width - 70, 19}, 11, ink, 500);
+        if (!entry.hint.empty())
+          label(surface, entry.hint,
+                {row.x + row.width - 62, row.y + 6, 52, 19}, 9, muted, 450,
+                1, white::TextAlign::right);
+        hits_.push_back({row, entry.action, {}, entry.value});
+        row_y += 34;
+      }
+    }
+  }
 }
 
 WorkbenchAction WorkbenchView::dispatch(const white::UiEvent& event) {
   if (event.type == "pointerdown") {
+    if (last_layout_.sidebar_splitter.contains(event.x, event.y)) {
+      resizing_sidebar_ = true;
+      resizing_viewer_ = false;
+      selecting_input_ = false;
+      return {WorkbenchActionKind::redraw, {}, 0, 0, false, true};
+    }
+    if (last_layout_.viewer_splitter.contains(event.x, event.y)) {
+      resizing_viewer_ = true;
+      resizing_sidebar_ = false;
+      selecting_input_ = false;
+      return {WorkbenchActionKind::redraw, {}, 0, 0, false, true};
+    }
     if (message_editor_bounds_.contains(event.x, event.y)) {
       selecting_input_ = true;
       selecting_filter_ = false;
@@ -1383,17 +1589,48 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent& event) {
   if (event.type == "pointermove") {
     pointer_x_ = event.x;
     pointer_y_ = event.y;
+    if (resizing_sidebar_) {
+      const auto content_reserve =
+          last_layout_.menu_bar.width >= 1160 && !viewer_collapsed_
+              ? 820.0F
+              : 560.0F;
+      const auto max_sidebar = std::max(
+          176.0F, last_layout_.menu_bar.width - content_reserve);
+      sidebar_width_ = std::clamp(event.x, 176.0F, max_sidebar);
+      sidebar_collapsed_ = false;
+      sidebar_manually_sized_ = true;
+      return {WorkbenchActionKind::redraw, {}, 0, 0, false, true};
+    }
+    if (resizing_viewer_) {
+      const auto available = last_layout_.menu_bar.width -
+                             last_layout_.sidebar.width;
+      const auto max_viewer = std::max(320.0F, available - 500.0F);
+      viewer_width_ = std::clamp(last_layout_.menu_bar.width - event.x,
+                                 320.0F, max_viewer);
+      viewer_collapsed_ = false;
+      viewer_manually_sized_ = true;
+      return {WorkbenchActionKind::redraw, {}, 0, 0, false, true};
+    }
     if (selecting_input_) {
       const auto& bounds = selecting_filter_ ? filter_editor_bounds_
                                              : message_editor_bounds_;
       const auto& text = selecting_filter_ ? filter_editor_text_
                                            : message_editor_text_;
       return {WorkbenchActionKind::set_editor_cursor, {}, 0,
-              editor_offset_at(event.x, event.y, bounds, text), true};
+              editor_offset_at(event.x, event.y, bounds, text), true, false};
     }
-    return {WorkbenchActionKind::redraw};
+    const bool over_splitter =
+        last_layout_.sidebar_splitter.contains(event.x, event.y) ||
+        last_layout_.viewer_splitter.contains(event.x, event.y);
+    return {WorkbenchActionKind::redraw, {}, 0, 0, false, over_splitter};
   }
   if (event.type == "wheel") {
+    if (last_layout_.sidebar.contains(event.x, event.y) &&
+        event.y >= 301) {
+      session_scroll_ = std::clamp(session_scroll_ + event.delta_y, 0.0F,
+                                   session_max_scroll_);
+      return {WorkbenchActionKind::redraw};
+    }
     if (last_layout_.timeline.contains(event.x, event.y)) {
       timeline_scroll_ = std::clamp(timeline_scroll_ + event.delta_y, 0.0F,
                                     timeline_max_scroll_);
@@ -1408,12 +1645,42 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent& event) {
     return {};
   }
   if (event.type != "click") return {};
+  if (resizing_sidebar_ || resizing_viewer_) {
+    resizing_sidebar_ = false;
+    resizing_viewer_ = false;
+    const bool over_splitter =
+        last_layout_.sidebar_splitter.contains(event.x, event.y) ||
+        last_layout_.viewer_splitter.contains(event.x, event.y);
+    return {WorkbenchActionKind::redraw, {}, 0, 0, false, over_splitter};
+  }
   if (selecting_input_) {
     selecting_input_ = false;
     return {WorkbenchActionKind::redraw};
   }
+  const Rect menu_headers{102, 7, 196, 30};
+  if (!active_menu_.empty() &&
+      !open_menu_bounds_.contains(event.x, event.y) &&
+      !menu_headers.contains(event.x, event.y)) {
+    active_menu_.clear();
+    return {WorkbenchActionKind::redraw};
+  }
   for (const auto& target : std::views::reverse(hits_)) {
     if (!target.bounds.contains(event.x, event.y)) continue;
+    if (target.action == WorkbenchActionKind::toggle_menu) {
+      active_menu_ = active_menu_ == target.value ? "" : target.value;
+      return {WorkbenchActionKind::redraw};
+    }
+    if (target.action == WorkbenchActionKind::toggle_left_panel) {
+      sidebar_collapsed_ = !sidebar_collapsed_;
+      active_menu_.clear();
+      return {WorkbenchActionKind::redraw};
+    }
+    if (target.action == WorkbenchActionKind::toggle_right_panel) {
+      viewer_collapsed_ = !viewer_collapsed_;
+      active_menu_.clear();
+      return {WorkbenchActionKind::redraw};
+    }
+    active_menu_.clear();
     if (target.action == WorkbenchActionKind::scroll_to_tail) {
       timeline_scroll_ = timeline_max_scroll_;
       follow_tail_ = true;
@@ -1436,6 +1703,10 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent& event) {
       return {WorkbenchActionKind::redraw};
     }
     return {target.action, target.value, target.index};
+  }
+  if (!active_menu_.empty()) {
+    active_menu_.clear();
+    return {WorkbenchActionKind::redraw};
   }
   return {};
 }

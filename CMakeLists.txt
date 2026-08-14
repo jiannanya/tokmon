@@ -124,5 +124,7 @@ install(DIRECTORY sdk/typescript sdk/python
   PATTERN "*.pyc" EXCLUDE)
 install(FILES docs/DESIGN.md README.md
   DESTINATION ${CMAKE_INSTALL_DATADIR}/tokmon/docs)
+install(FILES assets/tokmon-brand-2048.png
+  DESTINATION ${CMAKE_INSTALL_DATADIR}/tokmon/assets)
 install(DIRECTORY examples/
   DESTINATION ${CMAKE_INSTALL_DATADIR}/tokmon/examples)

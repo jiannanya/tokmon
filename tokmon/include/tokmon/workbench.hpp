@@ -47,6 +47,7 @@ struct WorkbenchFrame {
   bool message_focused{true};
   bool filter_focused{false};
   bool caret_visible{true};
+  bool window_maximized{false};
 };
 
 struct WorkbenchLayout {
@@ -60,6 +61,8 @@ struct WorkbenchLayout {
   white::Rect viewer_header;
   white::Rect document;
   white::Rect explorer;
+  white::Rect sidebar_splitter;
+  white::Rect viewer_splitter;
   bool compact_sidebar{false};
   bool viewer_visible{false};
 };
@@ -86,6 +89,12 @@ enum class WorkbenchActionKind {
   show_help,
   approve,
   deny,
+  toggle_menu,
+  toggle_left_panel,
+  toggle_right_panel,
+  window_minimize,
+  window_toggle_maximize,
+  window_close,
 };
 
 struct WorkbenchAction {
@@ -94,6 +103,7 @@ struct WorkbenchAction {
   std::size_t index{0};
   std::size_t cursor{0};
   bool extend_selection{false};
+  std::optional<bool> pointer_cursor;
 };
 
 // Product-level White view. It owns only ephemeral presentation state; Snow's
@@ -147,13 +157,25 @@ private:
   float timeline_max_scroll_{0};
   float document_scroll_{0};
   float document_max_scroll_{0};
+  float session_scroll_{0};
+  float session_max_scroll_{0};
   float pointer_x_{-1};
   float pointer_y_{-1};
+  float sidebar_width_{224};
+  float viewer_width_{0};
   std::size_t previous_item_count_{0};
+  std::string active_menu_;
   bool follow_tail_{true};
+  bool sidebar_collapsed_{false};
+  bool viewer_collapsed_{false};
+  bool sidebar_manually_sized_{false};
+  bool viewer_manually_sized_{false};
+  bool resizing_sidebar_{false};
+  bool resizing_viewer_{false};
   bool selecting_input_{false};
   white::Rect message_editor_bounds_;
   white::Rect filter_editor_bounds_;
+  white::Rect open_menu_bounds_;
   std::string message_editor_text_;
   std::string filter_editor_text_;
   bool selecting_filter_{false};

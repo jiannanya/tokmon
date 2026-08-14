@@ -16,6 +16,7 @@
 struct SDL_Window;
 struct SDL_Renderer;
 struct SDL_Texture;
+struct SDL_Cursor;
 
 namespace white {
 
@@ -24,6 +25,7 @@ struct WindowOptions {
   int width{1280};
   int height{800};
   bool resizable{true};
+  bool borderless{false};
 };
 
 class Window final {
@@ -52,7 +54,12 @@ public:
   void set_draw_callback(DrawCallback callback);
   void set_submit_callback(SubmitCallback callback);
   void set_event_callback(EventCallback callback);
+  [[nodiscard]] bool set_icon(const RasterSurface& icon);
   void set_builtin_chrome(bool enabled);
+  void set_pointer_cursor(bool pointer);
+  void minimize();
+  void toggle_maximize();
+  [[nodiscard]] bool maximized() const noexcept;
   void set_status(std::string status);
   [[nodiscard]] std::string input_text() const;
   [[nodiscard]] EditorSnapshot editor_snapshot() const;
@@ -78,6 +85,8 @@ private:
   SDL_Window* window_{nullptr};
   SDL_Renderer* renderer_{nullptr};
   SDL_Texture* texture_{nullptr};
+  SDL_Cursor* default_cursor_{nullptr};
+  SDL_Cursor* pointer_cursor_{nullptr};
   std::unique_ptr<RasterSurface> surface_;
   mutable std::mutex mutex_;
   DrawCallback draw_;

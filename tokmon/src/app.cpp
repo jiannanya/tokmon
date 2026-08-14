@@ -110,7 +110,20 @@ App::App(AppConfig config)
       approvals_(std::make_shared<ApprovalCoordinator>()),
       projection_(std::make_shared<Projection>()) {
   window_ = white_.service().create_window(
-      {.title = "Tokmon · Arche Agent OS", .width = 1500, .height = 900});
+      {.title = "Tokmon · Arche Agent OS",
+       .width = 1500,
+       .height = 900,
+       .resizable = true,
+       .borderless = true});
+  white::RasterSurface brand_icon(32, 32);
+  brand_icon.clear({0, 0, 0, 0});
+  constexpr white::Color brand_ink{92, 95, 102, 255};
+  brand_icon.fill_circle(11, 8, 2.5F, brand_ink);
+  brand_icon.fill_circle(20, 16, 2.5F, brand_ink);
+  brand_icon.fill_circle(11, 24, 2.5F, brand_ink);
+  brand_icon.line(11, 10.5F, 11, 21.5F, brand_ink, 1.8F);
+  brand_icon.line(13.5F, 16, 17.5F, 16, brand_ink, 1.8F);
+  (void)window_->set_icon(brand_icon);
   window_->set_builtin_chrome(false);
   window_->set_draw_callback(
       [this](white::RasterSurface& surface) { draw(surface); });
@@ -566,6 +579,7 @@ void App::start_turn(std::string message, tokmon::Json attachments) {
           turn_active_ = false;
         }
         update_status(std::move(final_status));
+        refresh_sessions();
         if (window_) window_->invalidate();
       });
 }
@@ -774,7 +788,7 @@ void App::refresh_sessions() {
           const auto header =
               item.value("header", tokmon::Json::object());
           auto title = header.value("title", "");
-          if (title.empty()) title = "会话 " + id.substr(0, 8);
+          if (title.empty()) title = "新会话";
           result.push_back({id, std::move(title),
                             item.value("created_at", ""),
                             item.value("last_seq", std::uint64_t{0}),
@@ -784,7 +798,7 @@ void App::refresh_sessions() {
     } else if (embedded_snow_) {
       for (const auto& item : embedded_snow_->agent().sessions(100)) {
         auto title = item.header.value("title", "");
-        if (title.empty()) title = "会话 " + item.id.str().substr(0, 8);
+        if (title.empty()) title = "新会话";
         result.push_back({item.id.str(), std::move(title), item.created_at,
                           item.last_seq, item.closed_at.has_value()});
       }
@@ -905,6 +919,8 @@ void App::choose_document() {
 
 void App::handle_workbench_event(const white::UiEvent& event) {
   const auto action = workbench_.dispatch(event);
+  if (action.pointer_cursor)
+    window_->set_pointer_cursor(*action.pointer_cursor);
   switch (action.kind) {
   case WorkbenchActionKind::new_session:
     submit("/new");
@@ -979,6 +995,16 @@ void App::handle_workbench_event(const white::UiEvent& event) {
   case WorkbenchActionKind::deny:
     approvals_->resolve(false);
     break;
+  case WorkbenchActionKind::window_minimize:
+    window_->minimize();
+    break;
+  case WorkbenchActionKind::window_toggle_maximize:
+    window_->toggle_maximize();
+    window_->invalidate();
+    break;
+  case WorkbenchActionKind::window_close:
+    window_->close();
+    break;
   case WorkbenchActionKind::redraw:
     window_->invalidate();
     break;
@@ -1009,6 +1035,7 @@ void App::draw(white::RasterSurface& surface) {
   frame.composition_epoch = ui_runtime_.epoch();
   frame.snow_connected = embedded_snow_ != nullptr ||
                          (snow_process_ && snow_process_->alive());
+  frame.window_maximized = window_->maximized();
   {
     std::lock_guard lock(state_mutex_);
     frame.status = status_;

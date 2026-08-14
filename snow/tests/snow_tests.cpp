@@ -75,6 +75,9 @@ private:
 int main() {
   assert(tokmon::sha256_hex("abc") ==
          "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+  assert(snow::session_title_from_prompt("  first\n  prompt  ") ==
+         "first prompt");
+  assert(snow::session_title_from_prompt("abcdef", 4) == "abcd…");
   const auto temporary =
       std::filesystem::temp_directory_path() / ("tokmon-test-" +
                                                 tokmon::make_uuid());
@@ -238,6 +241,11 @@ int main() {
       assembly.agent().run(session, "Create result.txt", {.model = "fake"});
   assert(result.reason == snow::TurnEndReason::completed);
   assert(result.final_text == "The file was written successfully.");
+  const auto named_sessions = assembly.agent().sessions();
+  const auto named = std::ranges::find(named_sessions, session,
+                                       &snow::SessionSummary::id);
+  assert(named != named_sessions.end());
+  assert(named->header.value("title", "") == "Create result.txt");
   assert(tokmon::read_text_file(temporary / "result.txt") ==
          "written by Snow");
 
@@ -251,6 +259,7 @@ int main() {
       return event.type == type;
     });
   };
+  assert(has("session/title"));
   assert(has("request/header"));
   assert(has("request/context"));
   assert(has("tool/policy-decision"));

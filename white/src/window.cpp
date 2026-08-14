@@ -9,19 +9,58 @@
 #include <thread>
 
 namespace white {
+namespace {
+
+SDL_HitTestResult SDLCALL borderless_hit_test(SDL_Window* window,
+                                              const SDL_Point* point,
+                                              void*) {
+  int width = 0;
+  int height = 0;
+  SDL_GetWindowSize(window, &width, &height);
+  const bool maximized =
+      (SDL_GetWindowFlags(window) & SDL_WINDOW_MAXIMIZED) != 0;
+  constexpr int edge = 6;
+  if (!maximized) {
+    const bool left = point->x < edge;
+    const bool right = point->x >= width - edge;
+    const bool top = point->y < edge;
+    const bool bottom = point->y >= height - edge;
+    if (left && top) return SDL_HITTEST_RESIZE_TOPLEFT;
+    if (right && top) return SDL_HITTEST_RESIZE_TOPRIGHT;
+    if (left && bottom) return SDL_HITTEST_RESIZE_BOTTOMLEFT;
+    if (right && bottom) return SDL_HITTEST_RESIZE_BOTTOMRIGHT;
+    if (left) return SDL_HITTEST_RESIZE_LEFT;
+    if (right) return SDL_HITTEST_RESIZE_RIGHT;
+    if (top) return SDL_HITTEST_RESIZE_TOP;
+    if (bottom) return SDL_HITTEST_RESIZE_BOTTOM;
+  }
+  // Menus and window controls remain normal hit targets. The quiet center of
+  // Tokmon's application bar behaves as the native title-bar drag region.
+  if (point->y < 44 && point->x >= 340 && point->x < width - 320)
+    return SDL_HITTEST_DRAGGABLE;
+  return SDL_HITTEST_NORMAL;
+}
+
+} // namespace
 
 Window::Window(WindowOptions options) : options_(std::move(options)) {
   if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS)) {
     throw tokmon::Error("white.sdl.init", SDL_GetError());
   }
-  const auto flags = options_.resizable
-                         ? SDL_WINDOW_RESIZABLE
-                         : static_cast<SDL_WindowFlags>(0);
+  auto flags = static_cast<SDL_WindowFlags>(0);
+  if (options_.resizable) flags |= SDL_WINDOW_RESIZABLE;
+  if (options_.borderless) flags |= SDL_WINDOW_BORDERLESS;
   window_ = SDL_CreateWindow(options_.title.c_str(), options_.width,
                              options_.height, flags);
   if (!window_) {
     throw tokmon::Error("white.sdl.window", SDL_GetError());
   }
+  if (options_.resizable)
+    (void)SDL_SetWindowMinimumSize(window_, 720, 480);
+  if (options_.borderless)
+    (void)SDL_SetWindowHitTest(window_, borderless_hit_test, nullptr);
+  default_cursor_ = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT);
+  pointer_cursor_ = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_POINTER);
   renderer_ = SDL_CreateRenderer(window_, nullptr);
   if (!renderer_) {
     throw tokmon::Error("white.sdl.renderer", SDL_GetError());
@@ -42,6 +81,8 @@ Window::Window(WindowOptions options) : options_(std::move(options)) {
 
 Window::~Window() {
   if (window_) SDL_StopTextInput(window_);
+  if (pointer_cursor_) SDL_DestroyCursor(pointer_cursor_);
+  if (default_cursor_) SDL_DestroyCursor(default_cursor_);
   if (texture_) SDL_DestroyTexture(texture_);
   if (renderer_) SDL_DestroyRenderer(renderer_);
   if (window_) SDL_DestroyWindow(window_);
@@ -64,10 +105,40 @@ void Window::set_event_callback(EventCallback callback) {
   events_ = std::move(callback);
 }
 
+bool Window::set_icon(const RasterSurface& icon) {
+  auto* native_icon = SDL_CreateSurfaceFrom(
+      icon.width(), icon.height(), SDL_PIXELFORMAT_BGRA32,
+      const_cast<void*>(icon.pixels()), static_cast<int>(icon.row_bytes()));
+  if (!native_icon) return false;
+  const auto applied = SDL_SetWindowIcon(window_, native_icon);
+  SDL_DestroySurface(native_icon);
+  return applied;
+}
+
 void Window::set_builtin_chrome(bool enabled) {
   std::lock_guard lock(mutex_);
   builtin_chrome_ = enabled;
   dirty_ = true;
+}
+
+void Window::set_pointer_cursor(bool pointer) {
+  auto* cursor = pointer ? pointer_cursor_ : default_cursor_;
+  if (cursor) (void)SDL_SetCursor(cursor);
+}
+
+void Window::minimize() { (void)SDL_MinimizeWindow(window_); }
+
+void Window::toggle_maximize() {
+  if (maximized())
+    (void)SDL_RestoreWindow(window_);
+  else
+    (void)SDL_MaximizeWindow(window_);
+  dirty_ = true;
+}
+
+bool Window::maximized() const noexcept {
+  return window_ &&
+         (SDL_GetWindowFlags(window_) & SDL_WINDOW_MAXIMIZED) != 0;
 }
 
 void Window::set_status(std::string status) {

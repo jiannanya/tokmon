@@ -7,6 +7,7 @@
 
 #include <map>
 #include <sstream>
+#include <cctype>
 
 #ifdef _WIN32
 #define NOMINMAX
@@ -177,6 +178,41 @@ void from_json(const tokmon::Json& in, TrajectoryEvent& event) {
   if (in.contains("parent_span_id"))
     event.parent_span_id =
         tokmon::SpanId(in["parent_span_id"].get<std::string>());
+}
+
+std::string session_title_from_prompt(std::string_view prompt,
+                                      std::size_t max_codepoints) {
+  if (max_codepoints == 0) return "新会话";
+  std::string result;
+  result.reserve(std::min(prompt.size(), max_codepoints * 3));
+  std::size_t codepoints = 0;
+  bool pending_space = false;
+  bool truncated = false;
+  for (std::size_t offset = 0; offset < prompt.size();) {
+    const auto first = static_cast<unsigned char>(prompt[offset]);
+    const auto width = first < 0x80U   ? std::size_t{1}
+                       : first < 0xe0U ? std::size_t{2}
+                       : first < 0xf0U ? std::size_t{3}
+                                       : std::size_t{4};
+    const auto actual_width = std::min(width, prompt.size() - offset);
+    if (first < 0x80U && std::isspace(first)) {
+      pending_space = !result.empty();
+      offset += actual_width;
+      continue;
+    }
+    if (codepoints >= max_codepoints) {
+      truncated = true;
+      break;
+    }
+    if (pending_space && !result.empty()) result.push_back(' ');
+    pending_space = false;
+    result.append(prompt.substr(offset, actual_width));
+    offset += actual_width;
+    ++codepoints;
+  }
+  if (result.empty()) return "新会话";
+  if (truncated) result += "…";
+  return result;
 }
 
 TrajectoryJournal::TrajectoryJournal(std::filesystem::path database)
@@ -517,6 +553,43 @@ tokmon::Json TrajectoryJournal::session_header(
   return tokmon::Json::parse(text ? text : "{}");
 }
 
+bool TrajectoryJournal::set_session_title_from_prompt(
+    const tokmon::SessionId& session, std::string_view prompt) {
+  const auto title = session_title_from_prompt(prompt);
+  TrajectoryEvent committed;
+  {
+    std::lock_guard lock(mutex_);
+    auto header = session_header(session);
+    if (header.contains("title") && header["title"].is_string() &&
+        !header["title"].get<std::string>().empty())
+      return false;
+    header["title"] = title;
+    committed.type = "session/title";
+    committed.session_id = session;
+    committed.trace_id = tokmon::TraceId(tokmon::make_uuid());
+    committed.producer_fiber = arche::FiberId("snow.session.trajectory");
+    committed.data = {{"title", title}, {"source", "first-prompt"}};
+    execute("BEGIN IMMEDIATE");
+    try {
+      Statement statement(database_handle_,
+                          "UPDATE sessions SET header_json=? WHERE id=?");
+      const auto encoded = header.dump();
+      bind_text(statement.get(), 1, encoded);
+      bind_text(statement.get(), 2, session.str());
+      if (sqlite3_step(statement.get()) != SQLITE_DONE)
+        throw tokmon::Error("snow.session.title",
+                            sqlite3_errmsg(database_handle_));
+      committed = append_locked(std::move(committed));
+      execute("COMMIT");
+    } catch (...) {
+      execute("ROLLBACK");
+      throw;
+    }
+  }
+  committed_.emit(committed);
+  return true;
+}
+
 std::uint64_t TrajectoryJournal::last_seq(
     const tokmon::SessionId& session) const {
   std::lock_guard lock(mutex_);
@@ -543,35 +616,57 @@ bool TrajectoryJournal::session_exists(
 std::vector<SessionSummary> TrajectoryJournal::sessions(
     std::size_t limit) const {
   std::lock_guard lock(mutex_);
-  Statement statement(database_handle_, R"SQL(
-    SELECT s.id, s.parent_id, s.created_at, s.closed_at, s.header_json,
-           COALESCE(MAX(e.seq), 0)
-      FROM sessions s
-      LEFT JOIN trajectory_events e ON e.session_id = s.id
-     GROUP BY s.id, s.parent_id, s.created_at, s.closed_at, s.header_json
-     ORDER BY s.created_at DESC
-     LIMIT ?
-  )SQL");
-  sqlite3_bind_int64(statement.get(), 1,
-                     static_cast<sqlite3_int64>(std::clamp<std::size_t>(
-                         limit, std::size_t{1}, std::size_t{1000})));
   std::vector<SessionSummary> result;
-  while (sqlite3_step(statement.get()) == SQLITE_ROW) {
-    const auto text = [&](int column) -> std::string {
-      const auto* value = sqlite3_column_text(statement.get(), column);
-      return value ? reinterpret_cast<const char*>(value) : std::string{};
-    };
-    SessionSummary item;
-    item.id = tokmon::SessionId(text(0));
-    if (sqlite3_column_type(statement.get(), 1) != SQLITE_NULL)
-      item.parent_id = tokmon::SessionId(text(1));
-    item.created_at = text(2);
-    if (sqlite3_column_type(statement.get(), 3) != SQLITE_NULL)
-      item.closed_at = text(3);
-    item.header = tokmon::Json::parse(text(4));
-    item.last_seq = static_cast<std::uint64_t>(
-        sqlite3_column_int64(statement.get(), 5));
-    result.push_back(std::move(item));
+  {
+    Statement statement(database_handle_, R"SQL(
+      SELECT s.id, s.parent_id, s.created_at, s.closed_at, s.header_json,
+             COALESCE(MAX(e.seq), 0)
+        FROM sessions s
+        LEFT JOIN trajectory_events e ON e.session_id = s.id
+       GROUP BY s.id, s.parent_id, s.created_at, s.closed_at, s.header_json
+       ORDER BY s.created_at DESC
+       LIMIT ?
+    )SQL");
+    sqlite3_bind_int64(statement.get(), 1,
+                       static_cast<sqlite3_int64>(std::clamp<std::size_t>(
+                           limit, std::size_t{1}, std::size_t{1000})));
+    while (sqlite3_step(statement.get()) == SQLITE_ROW) {
+      const auto text = [&](int column) -> std::string {
+        const auto* value = sqlite3_column_text(statement.get(), column);
+        return value ? reinterpret_cast<const char*>(value) : std::string{};
+      };
+      SessionSummary item;
+      item.id = tokmon::SessionId(text(0));
+      if (sqlite3_column_type(statement.get(), 1) != SQLITE_NULL)
+        item.parent_id = tokmon::SessionId(text(1));
+      item.created_at = text(2);
+      if (sqlite3_column_type(statement.get(), 3) != SQLITE_NULL)
+        item.closed_at = text(3);
+      item.header = tokmon::Json::parse(text(4));
+      item.last_seq = static_cast<std::uint64_t>(
+          sqlite3_column_int64(statement.get(), 5));
+      result.push_back(std::move(item));
+    }
+  }
+  // Existing databases are named on read as well, so sessions created before
+  // automatic naming immediately stop exposing UUID prefixes in clients.
+  for (auto& item : result) {
+    const auto title = item.header.value("title", "");
+    if (!title.empty()) continue;
+    Statement first_prompt(database_handle_, R"SQL(
+      SELECT envelope_json FROM trajectory_events
+       WHERE session_id=? AND type='user/message'
+       ORDER BY seq LIMIT 1
+    )SQL");
+    bind_text(first_prompt.get(), 1, item.id.str());
+    if (sqlite3_step(first_prompt.get()) == SQLITE_ROW) {
+      const auto* encoded = sqlite3_column_text(first_prompt.get(), 0);
+      const auto event = tokmon::Json::parse(
+          encoded ? reinterpret_cast<const char*>(encoded) : "{}")
+                             .get<TrajectoryEvent>();
+      item.header["title"] =
+          session_title_from_prompt(event.data.value("content", ""));
+    }
   }
   return result;
 }

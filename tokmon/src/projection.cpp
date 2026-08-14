@@ -123,7 +123,7 @@ void Projection::apply(const snow::TrajectoryEvent& event) {
                       event.seq});
   } else {
     static const std::set<std::string, std::less<>> canonical_internal = {
-        "session/header", "session/created", "session/forked",
+        "session/header", "session/title", "session/created", "session/forked",
         "session/closed", "session/end", "session/end-seed",
         "run/start", "run/end", "turn/start", "turn/end", "step/start",
         "step/end", "request/header", "request/context", "model/request",

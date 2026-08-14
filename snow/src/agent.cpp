@@ -126,6 +126,11 @@ RunResult Agent::run(const tokmon::SessionId& session,
     }
   } clear_active{this, session.str()};
 
+  tokmon::Json safe_title_source = user_message;
+  redact(safe_title_source);
+  (void)journal_->set_session_title_from_prompt(
+      session, safe_title_source.get<std::string>());
+
   auto append = [&](TrajectoryEvent event) {
     return append_event(std::move(event));
   };

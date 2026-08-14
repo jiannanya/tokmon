@@ -8,6 +8,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 struct sqlite3;
@@ -50,6 +51,8 @@ struct SessionSummary {
 
 void to_json(tokmon::Json& out, const TrajectoryEvent& event);
 void from_json(const tokmon::Json& in, TrajectoryEvent& event);
+[[nodiscard]] std::string session_title_from_prompt(
+    std::string_view prompt, std::size_t max_codepoints = 36);
 
 class TrajectoryJournal final {
 public:
@@ -71,6 +74,8 @@ public:
       std::size_t limit = 10000) const;
   [[nodiscard]] tokmon::Json session_header(
       const tokmon::SessionId& session) const;
+  bool set_session_title_from_prompt(const tokmon::SessionId& session,
+                                     std::string_view prompt);
   [[nodiscard]] std::uint64_t last_seq(
       const tokmon::SessionId& session) const;
   [[nodiscard]] bool session_exists(const tokmon::SessionId& session) const;
