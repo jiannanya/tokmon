@@ -2,6 +2,7 @@
 
 #include <tokmon/approval.hpp>
 #include <tokmon/projection.hpp>
+#include <tokmon/settings.hpp>
 
 #include <white/document.hpp>
 #include <white/renderer.hpp>
@@ -29,12 +30,16 @@ struct WorkbenchAttachment {
 
 struct WorkbenchFrame {
   std::vector<ConversationItem> items;
+  std::vector<snow::TrajectoryEvent> trajectory_events;
   std::optional<PendingApproval> approval;
   std::string session_id;
   std::string status;
   std::string message_input;
   std::string file_filter;
   std::string model;
+  std::string trajectory_search;
+  DesktopSettings settings;
+  std::string active_settings_field;
   std::vector<WorkbenchSession> sessions;
   std::vector<WorkbenchAttachment> attachments;
   std::size_t editor_cursor{0};
@@ -46,6 +51,8 @@ struct WorkbenchFrame {
   bool turn_active{false};
   bool message_focused{true};
   bool filter_focused{false};
+  bool trajectory_search_focused{false};
+  bool settings_field_focused{false};
   bool caret_visible{true};
   bool window_maximized{false};
 };
@@ -95,6 +102,20 @@ enum class WorkbenchActionKind {
   window_minimize,
   window_toggle_maximize,
   window_close,
+  open_settings,
+  close_settings,
+  save_settings,
+  open_config_file,
+  focus_settings_field,
+  set_setting,
+  focus_trajectory_search,
+  export_trajectory,
+  show_conversation,
+  show_trajectory,
+  set_trajectory_filter,
+  toggle_trajectory_event,
+  toggle_profile_menu,
+  settings_tab,
 };
 
 struct WorkbenchAction {
@@ -113,12 +134,14 @@ public:
   explicit WorkbenchView(std::filesystem::path workspace);
 
   [[nodiscard]] WorkbenchLayout layout(float width, float height) const;
-  void draw(white::RasterSurface& surface, const WorkbenchFrame& frame);
-  [[nodiscard]] WorkbenchAction dispatch(const white::UiEvent& event);
-  [[nodiscard]] const std::filesystem::path& selected_document() const noexcept {
+  void draw(white::RasterSurface &surface, const WorkbenchFrame &frame);
+  [[nodiscard]] WorkbenchAction dispatch(const white::UiEvent &event);
+  [[nodiscard]] const std::filesystem::path &
+  selected_document() const noexcept {
     return selected_document_;
   }
-  bool show_document(const std::filesystem::path& path);
+  bool show_document(const std::filesystem::path &path);
+  void close_settings() noexcept { settings_open_ = false; }
 
 private:
   struct FileEntry {
@@ -138,12 +161,12 @@ private:
   };
 
   void refresh_files(std::string_view filter = {});
-  void open_document(const std::filesystem::path& relative);
-  void close_document(const std::filesystem::path& relative);
-  [[nodiscard]] std::size_t editor_offset_at(
-      float x, float y, const white::Rect& bounds,
-      std::string_view text) const;
-  [[nodiscard]] bool hovered(const white::Rect& bounds) const noexcept;
+  void open_document(const std::filesystem::path &relative);
+  void close_document(const std::filesystem::path &relative);
+  [[nodiscard]] std::size_t editor_offset_at(float x, float y,
+                                             const white::Rect &bounds,
+                                             std::string_view text) const;
+  [[nodiscard]] bool hovered(const white::Rect &bounds) const noexcept;
 
   std::filesystem::path workspace_;
   std::filesystem::path selected_document_;
@@ -164,7 +187,16 @@ private:
   float sidebar_width_{224};
   float viewer_width_{0};
   std::size_t previous_item_count_{0};
+  std::size_t previous_trajectory_event_count_{0};
   std::string active_menu_;
+  std::string settings_tab_{"general"};
+  std::string trajectory_filter_{"all"};
+  std::set<std::uint64_t> expanded_trajectory_events_;
+  float trajectory_scroll_{0};
+  float trajectory_max_scroll_{0};
+  bool profile_menu_open_{false};
+  bool settings_open_{false};
+  bool trajectory_open_{false};
   bool follow_tail_{true};
   bool sidebar_collapsed_{false};
   bool viewer_collapsed_{false};
@@ -175,10 +207,18 @@ private:
   bool selecting_input_{false};
   white::Rect message_editor_bounds_;
   white::Rect filter_editor_bounds_;
+  white::Rect settings_editor_bounds_;
+  white::Rect trajectory_search_bounds_;
   white::Rect open_menu_bounds_;
+  white::Rect profile_menu_bounds_;
+  white::Rect settings_modal_bounds_;
   std::string message_editor_text_;
   std::string filter_editor_text_;
+  std::string settings_editor_text_;
+  std::string settings_editor_field_;
+  std::string trajectory_search_text_;
   bool selecting_filter_{false};
+  std::string selecting_editor_;
   std::string last_filter_;
 };
 

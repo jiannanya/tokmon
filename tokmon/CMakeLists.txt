@@ -2,6 +2,7 @@ add_library(tokmon_client
   src/app.cpp
   src/approval.cpp
   src/projection.cpp
+  src/settings.cpp
   src/product_assembly.cpp
   src/snow_client.cpp
   src/workbench.cpp)

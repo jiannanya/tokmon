@@ -32,9 +32,10 @@ struct ConversationItem {
 
 class Projection final {
 public:
-  void apply(const snow::TrajectoryEvent& event);
-  void replay(const std::vector<snow::TrajectoryEvent>& events);
+  void apply(const snow::TrajectoryEvent &event);
+  void replay(const std::vector<snow::TrajectoryEvent> &events);
   [[nodiscard]] std::vector<ConversationItem> snapshot() const;
+  [[nodiscard]] std::vector<snow::TrajectoryEvent> event_snapshot() const;
   [[nodiscard]] std::uint64_t cursor() const noexcept;
   void append_local(ItemKind kind, std::string title, std::string content,
                     std::string status = "local",
@@ -45,6 +46,7 @@ public:
 private:
   mutable std::mutex mutex_;
   std::vector<ConversationItem> items_;
+  std::vector<snow::TrajectoryEvent> events_;
   std::optional<std::size_t> streaming_assistant_;
   std::uint64_t cursor_{0};
 };
