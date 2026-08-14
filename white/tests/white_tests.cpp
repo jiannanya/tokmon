@@ -81,6 +81,24 @@ int main() {
   editor.insert("مرحبا");
   assert(editor.value() == "مرحبا");
 
+  editor.set_value("ab\ncde\nxy");
+  editor.set_cursor(5);
+  editor.move_up();
+  assert(editor.cursor() == 2);
+  editor.move_down();
+  assert(editor.cursor() == 5);
+  editor.move_end();
+  assert(editor.cursor() == 6);
+  editor.move_home(true);
+  assert(editor.selected_text() == "cde");
+  editor.move_document_end();
+  assert(editor.cursor() == editor.value().size());
+  editor.move_document_home(true);
+  assert(editor.selected_text() == editor.value());
+  editor.set_value("A世界");
+  editor.set_cursor(2);
+  assert(editor.cursor() == 1);
+
   white::VirtualList virtual_list;
   virtual_list.configure(10000, 24, 480, 4);
   virtual_list.set_scroll_offset(120000);
@@ -92,6 +110,21 @@ int main() {
   surface.clear({255, 255, 255, 255});
   surface.render(document);
   surface.render(scrolling);
+  const auto paragraph_height = surface.paragraph(
+      "White shapes 中文、emoji 🙂 and RTL العربية.",
+      {20, 20, 260, 80}, 15, {25, 27, 32, 255}, 500, 1.4F, 3);
+  assert(paragraph_height > 0);
+  const std::vector<white::RichTextSpan> rich_spans = {
+      {"Rich ", 14, {25, 27, 32, 255}, 400},
+      {"markdown", 14, {20, 112, 226, 255}, 650},
+      {" inline code ", 14, {25, 27, 32, 255}, 400},
+      {"Shift+Enter", 13, {25, 27, 32, 255}, 500, true,
+       white::Color{235, 236, 238, 255}}};
+  assert(surface.rich_paragraph(rich_spans, {20, 105, 260, 80}) > 0);
+  surface.push_clip({0, 0, 100, 100});
+  surface.fill_circle(50, 50, 20, {20, 112, 226, 255});
+  surface.line(10, 10, 90, 90, {255, 255, 255, 255}, 2);
+  surface.pop_clip();
   assert(surface.pixels() != nullptr);
   assert(surface.row_bytes() >= 800 * 4);
 

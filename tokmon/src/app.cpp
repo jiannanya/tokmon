@@ -1,9 +1,8 @@
 #include <tokmon/app.hpp>
 
 #include <snow/config.hpp>
+#include <tokmon/common/digest.hpp>
 #include <tokmon/common/files.hpp>
-#include <white/virtual_list.hpp>
-
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -11,13 +10,6 @@
 
 namespace tokmon::desktop {
 namespace {
-
-std::string wrap(std::string_view text, std::size_t width,
-                 std::size_t line) {
-  const auto start = line * width;
-  if (start >= text.size()) return {};
-  return std::string(text.substr(start, width));
-}
 
 std::filesystem::path resolve_config_path(
     const std::filesystem::path& workspace,
@@ -113,15 +105,19 @@ AppConfig load_app_config(const std::filesystem::path& workspace,
 
 App::App(AppConfig config)
     : config_(std::move(config)),
+      workbench_(config_.workspace),
       white_(ui_runtime_),
       approvals_(std::make_shared<ApprovalCoordinator>()),
       projection_(std::make_shared<Projection>()) {
   window_ = white_.service().create_window(
-      {.title = "Tokmon", .width = 1280, .height = 820});
+      {.title = "Tokmon · Arche Agent OS", .width = 1500, .height = 900});
+  window_->set_builtin_chrome(false);
   window_->set_draw_callback(
       [this](white::RasterSurface& surface) { draw(surface); });
   window_->set_submit_callback(
-      [this](std::string message) { submit(std::move(message)); });
+      [this](std::string message) { handle_editor_submit(std::move(message)); });
+  window_->set_event_callback(
+      [this](white::UiEvent event) { handle_workbench_event(event); });
   approvals_->set_changed([this] {
     if (window_) window_->invalidate();
   });
@@ -192,6 +188,7 @@ App::App(AppConfig config)
     poller_ =
         std::jthread([this](std::stop_token stop) { poll_child(stop); });
   }
+  refresh_sessions();
   product_ = std::make_unique<ProductAssembly>(
       ui_runtime_, projection_, approvals_, snow_process_);
 }
@@ -228,6 +225,10 @@ App::~App() {
 }
 
 int App::run() { return window_->run(); }
+
+void App::capture(const std::filesystem::path& path) {
+  window_->save_screenshot(path);
+}
 
 int App::smoke() {
   submit("/diagnostics");
@@ -321,6 +322,7 @@ void App::submit(std::string message) {
       }
       projection_->begin_fork();
       persist_session();
+      refresh_sessions();
       update_status("Forked session " + session_.str());
     } catch (const std::exception& error) {
       update_status("Fork failed: " + std::string(error.what()));
@@ -341,10 +343,43 @@ void App::submit(std::string message) {
   if (message == "/help") {
     projection_->append_local(
         ItemKind::status, "Tokmon commands",
-        "/cancel\n/steer <message>\n/fork\n/restart\n/diagnostics\n"
+        "/new\n/cancel\n/steer <message>\n/fork\n/restart\n/diagnostics\n"
         "/inspect\n/replay [R0|R1|R2]\n"
         "/artifact <sha256> [media-type]");
     window_->invalidate();
+    return;
+  }
+
+  if (message == "/new") {
+    {
+      std::lock_guard lock(state_mutex_);
+      if (turn_active_) {
+        status_ = "Finish or cancel the active turn before creating a session";
+        window_->set_status(status_);
+        window_->invalidate();
+        return;
+      }
+    }
+    try {
+      if (snow_process_) {
+        const auto created = snow_process_->request(
+            "session.create",
+            {{"metadata", {{"origin", "tokmon-desktop"},
+                            {"transport", "child-process"}}}},
+            std::chrono::seconds(10));
+        session_ = tokmon::SessionId(
+            created.at("session_id").get<std::string>());
+      } else {
+        session_ = embedded_snow_->agent().create_session(
+            {{"origin", "tokmon-desktop"}, {"mode", "embedded"}});
+      }
+      projection_->clear();
+      persist_session();
+      refresh_sessions();
+      update_status("Created session " + session_.str());
+    } catch (const std::exception& error) {
+      update_status("New session failed: " + std::string(error.what()));
+    }
     return;
   }
 
@@ -459,6 +494,7 @@ void App::submit(std::string message) {
     return;
   }
 
+  tokmon::Json turn_attachments = tokmon::Json::array();
   {
     std::lock_guard lock(state_mutex_);
     if (turn_active_) {
@@ -472,15 +508,26 @@ void App::submit(std::string message) {
       return;
     }
     turn_active_ = true;
+    for (const auto& attachment : attachments_) {
+      turn_attachments.push_back(
+          {{"name", attachment.name},
+           {"path", attachment.path.generic_string()},
+           {"sha256", attachment.sha256},
+           {"bytes", attachment.content.size()},
+           {"content", attachment.content}});
+    }
+    attachments_.clear();
+    message_draft_.clear();
   }
   update_status("Snow is working...");
-  start_turn(std::move(message));
+  start_turn(std::move(message), std::move(turn_attachments));
 }
 
-void App::start_turn(std::string message) {
+void App::start_turn(std::string message, tokmon::Json attachments) {
   if (active_turn_.joinable()) active_turn_.join();
   active_turn_ = std::jthread(
-      [this, message = std::move(message)](std::stop_token stop) {
+      [this, message = std::move(message),
+       attachments = std::move(attachments)](std::stop_token stop) {
         std::string final_status;
         try {
           if (snow_process_) {
@@ -489,6 +536,7 @@ void App::start_turn(std::string message) {
                 {{"session_id", session_.str()},
                  {"message", message},
                  {"model", config_.model},
+                 {"attachments", attachments},
                  {"max_steps", 32}},
                 config_.request_timeout);
             final_status = "Turn " + result.value("reason", "completed");
@@ -501,7 +549,10 @@ void App::start_turn(std::string message) {
           } else {
             const auto result = embedded_snow_->agent().run(
                 session_, message,
-                {.model = config_.model, .max_steps = 32}, stop);
+                {.model = config_.model,
+                 .attachments = attachments,
+                 .max_steps = 32},
+                stop);
             final_status =
                 "Turn " + std::string(snow::to_string(result.reason));
           }
@@ -552,6 +603,7 @@ void App::connect_child(bool initial) {
   }
   update_status(std::string(initial ? "Snow connected" : "Snow reconnected") +
                 " (PID " + std::to_string(snow_process_->process_id()) + ")");
+  if (!initial) refresh_sessions();
 }
 
 void App::poll_child(std::stop_token stop) {
@@ -664,6 +716,277 @@ void App::update_status(std::string status) {
   }
 }
 
+void App::handle_editor_submit(std::string value) {
+  bool filtering = false;
+  {
+    std::lock_guard lock(state_mutex_);
+    filtering = filter_input_;
+    if (filtering)
+      file_filter_ = value;
+    else
+      message_draft_.clear();
+  }
+  if (filtering) {
+    window_->set_input_text(std::move(value));
+    window_->set_input_focused(true);
+    window_->invalidate();
+    return;
+  }
+  submit(std::move(value));
+}
+
+void App::set_input_mode(bool filter) {
+  const auto editor = window_->editor_snapshot();
+  std::string next_value;
+  bool changed = false;
+  {
+    std::lock_guard lock(state_mutex_);
+    if (filter_input_ == filter) {
+      if (filter)
+        file_filter_ = editor.value;
+      else
+        message_draft_ = editor.value;
+    } else {
+      if (filter_input_)
+        file_filter_ = editor.value;
+      else
+        message_draft_ = editor.value;
+      filter_input_ = filter;
+      next_value = filter ? file_filter_ : message_draft_;
+      changed = true;
+    }
+  }
+  if (changed) window_->set_input_text(std::move(next_value));
+  window_->set_input_focused(true);
+  window_->invalidate();
+}
+
+void App::refresh_sessions() {
+  try {
+    std::vector<WorkbenchSession> result;
+    if (snow_process_) {
+      const auto value = snow_process_->request(
+          "session.list", {{"limit", 100}}, std::chrono::seconds(10));
+      if (value.is_array()) {
+        for (const auto& item : value) {
+          const auto id = item.value("session_id", "");
+          if (id.empty()) continue;
+          const auto header =
+              item.value("header", tokmon::Json::object());
+          auto title = header.value("title", "");
+          if (title.empty()) title = "会话 " + id.substr(0, 8);
+          result.push_back({id, std::move(title),
+                            item.value("created_at", ""),
+                            item.value("last_seq", std::uint64_t{0}),
+                            item.value("closed", false)});
+        }
+      }
+    } else if (embedded_snow_) {
+      for (const auto& item : embedded_snow_->agent().sessions(100)) {
+        auto title = item.header.value("title", "");
+        if (title.empty()) title = "会话 " + item.id.str().substr(0, 8);
+        result.push_back({item.id.str(), std::move(title), item.created_at,
+                          item.last_seq, item.closed_at.has_value()});
+      }
+    }
+    {
+      std::lock_guard lock(state_mutex_);
+      sessions_ = std::move(result);
+    }
+    if (window_) window_->invalidate();
+  } catch (const std::exception& error) {
+    update_status("Session list failed: " + std::string(error.what()));
+  }
+}
+
+void App::switch_session(std::string session_id) {
+  if (session_id.empty() || session_id == session_.str()) return;
+  {
+    std::lock_guard lock(state_mutex_);
+    if (turn_active_) {
+      status_ = "Finish or cancel the active turn before switching sessions";
+      window_->set_status(status_);
+      window_->invalidate();
+      return;
+    }
+  }
+  try {
+    std::vector<snow::TrajectoryEvent> events;
+    if (snow_process_) {
+      const auto resumed = snow_process_->request(
+          "session.resume", {{"session_id", session_id}, {"after", 0}},
+          std::chrono::seconds(10));
+      for (const auto& value :
+           resumed.value("events", tokmon::Json::array()))
+        events.push_back(value.get<snow::TrajectoryEvent>());
+    } else {
+      events = embedded_snow_->agent().events(tokmon::SessionId(session_id));
+    }
+    session_ = tokmon::SessionId(std::move(session_id));
+    projection_->replay(events);
+    persist_session();
+    update_status("Switched to session " + session_.str());
+  } catch (const std::exception& error) {
+    update_status("Session switch failed: " + std::string(error.what()));
+  }
+}
+
+void App::choose_attachments() {
+  window_->choose_files(
+      [this](std::vector<std::filesystem::path> files) {
+        constexpr std::uintmax_t per_file_limit = 1024U * 1024U;
+        constexpr std::uintmax_t total_limit = 2U * 1024U * 1024U;
+        std::size_t added = 0;
+        std::string rejection;
+        for (const auto& selected : files) {
+          std::error_code error;
+          const auto path = std::filesystem::weakly_canonical(selected, error);
+          if (error || !std::filesystem::is_regular_file(path, error)) {
+            rejection = "Skipped a missing or invalid attachment";
+            continue;
+          }
+          const auto size = std::filesystem::file_size(path, error);
+          if (error || size > per_file_limit) {
+            rejection = "Each attachment must be 1 MiB or smaller";
+            continue;
+          }
+          std::string content;
+          try {
+            content = tokmon::read_text_file(path);
+          } catch (const std::exception& read_error) {
+            rejection = read_error.what();
+            continue;
+          }
+          if (content.find('\0') != std::string::npos) {
+            rejection = "Binary attachments are not supported";
+            continue;
+          }
+          std::lock_guard lock(state_mutex_);
+          std::size_t total = 0;
+          for (const auto& file : attachments_)
+            total += file.content.size();
+          if (attachments_.size() >= 8 ||
+              total + content.size() > total_limit) {
+            rejection = "Attachments are limited to 8 files and 2 MiB total";
+            continue;
+          }
+          if (std::ranges::any_of(attachments_, [&](const AttachedFile& file) {
+                return file.path == path;
+              }))
+            continue;
+          attachments_.push_back(
+              {path, path.filename().string(), content,
+               tokmon::sha256_hex(content)});
+          ++added;
+        }
+        if (added > 0)
+          update_status("Added " + std::to_string(added) + " attachment(s)");
+        else if (!rejection.empty())
+          update_status(std::move(rejection));
+        if (window_) window_->invalidate();
+      },
+      true, config_.workspace);
+}
+
+void App::choose_document() {
+  window_->choose_files(
+      [this](std::vector<std::filesystem::path> files) {
+        if (files.empty()) return;
+        if (!workbench_.show_document(files.front())) {
+          update_status(
+              "Document preview accepts text/source files inside the workspace");
+          return;
+        }
+        update_status("Opened " + files.front().filename().string());
+        if (window_) window_->invalidate();
+      },
+      false, config_.workspace);
+}
+
+void App::handle_workbench_event(const white::UiEvent& event) {
+  const auto action = workbench_.dispatch(event);
+  switch (action.kind) {
+  case WorkbenchActionKind::new_session:
+    submit("/new");
+    break;
+  case WorkbenchActionKind::fork_session:
+    submit("/fork");
+    break;
+  case WorkbenchActionKind::diagnostics:
+    submit("/diagnostics");
+    break;
+  case WorkbenchActionKind::inspect_composition:
+    submit("/inspect");
+    break;
+  case WorkbenchActionKind::cancel_turn:
+    submit("/cancel");
+    break;
+  case WorkbenchActionKind::submit_input:
+    set_input_mode(false);
+    window_->submit_input();
+    break;
+  case WorkbenchActionKind::set_message_input:
+    set_input_mode(false);
+    {
+      std::lock_guard lock(state_mutex_);
+      message_draft_ = action.value;
+    }
+    window_->set_input_text(action.value);
+    window_->set_input_focused(true);
+    break;
+  case WorkbenchActionKind::copy_text:
+    try {
+      window_->copy_to_clipboard(action.value);
+      update_status("Copied message to clipboard");
+    } catch (const std::exception& error) {
+      update_status("Copy failed: " + std::string(error.what()));
+    }
+    break;
+  case WorkbenchActionKind::focus_message:
+    set_input_mode(false);
+    window_->set_input_cursor(action.cursor, false);
+    break;
+  case WorkbenchActionKind::focus_filter:
+    set_input_mode(true);
+    window_->set_input_cursor(action.cursor, false);
+    break;
+  case WorkbenchActionKind::set_editor_cursor:
+    window_->set_input_cursor(action.cursor, action.extend_selection);
+    break;
+  case WorkbenchActionKind::switch_session:
+    switch_session(action.value);
+    break;
+  case WorkbenchActionKind::attach_files:
+    choose_attachments();
+    break;
+  case WorkbenchActionKind::open_file_dialog:
+    choose_document();
+    break;
+  case WorkbenchActionKind::remove_attachment: {
+    std::lock_guard lock(state_mutex_);
+    if (action.index < attachments_.size())
+      attachments_.erase(attachments_.begin() +
+                         static_cast<std::ptrdiff_t>(action.index));
+    window_->invalidate();
+    break;
+  }
+  case WorkbenchActionKind::show_help:
+    submit("/help");
+    break;
+  case WorkbenchActionKind::approve:
+    approvals_->resolve(true);
+    break;
+  case WorkbenchActionKind::deny:
+    approvals_->resolve(false);
+    break;
+  case WorkbenchActionKind::redraw:
+    window_->invalidate();
+    break;
+  default:
+    break;
+  }
+}
+
 void App::persist_session() const {
   if (session_.empty()) return;
   const auto path =
@@ -676,67 +999,45 @@ void App::persist_session() const {
 }
 
 void App::draw(white::RasterSurface& surface) {
-  const auto items = projection_->snapshot();
-  const float width = static_cast<float>(surface.width());
-  float y = 52;
-  constexpr float estimated_height = 126;
-  white::VirtualList list;
-  list.configure(items.size(), estimated_height,
-                 static_cast<float>(surface.height()) - 120, 2);
-  list.scroll_to_end();
-  const auto [first, end] = list.visible_range();
-  for (std::size_t index = first; index < end; ++index) {
-    const auto& item = items[index];
-    const bool user = item.kind == ItemKind::user;
-    const auto background =
-        user ? white::Color{225, 233, 255, 255}
-             : (item.kind == ItemKind::error
-                    ? white::Color{255, 230, 230, 255}
-                    : (item.kind == ItemKind::artifact
-                           ? white::Color{231, 248, 241, 255}
-                           : (item.kind == ItemKind::diagnostic
-                                  ? white::Color{239, 237, 255, 255}
-                                  : white::Color{255, 255, 255, 255}))
-                    );
-    const float x = user ? width * 0.30F : 24;
-    const float box_width = user ? width * 0.66F : width * 0.78F;
-    const auto lines =
-        std::max<std::size_t>(1, (item.content.size() + 89) / 90);
-    const float box_height =
-        48 + static_cast<float>(std::min<std::size_t>(lines, 5)) * 19;
-    surface.fill_rect({x, y, box_width, box_height}, background, 10);
-    surface.stroke_rect({x, y, box_width, box_height},
-                        {220, 223, 230, 255}, 1, 10);
-    surface.text(item.title + " / " + item.status, x + 14, y + 21, 13,
-                 {90, 96, 108, 255});
-    for (std::size_t line = 0; line < std::min<std::size_t>(lines, 5);
-         ++line) {
-      surface.text(wrap(item.content, 90, line), x + 14,
-                   y + 46 + static_cast<float>(line) * 19, 15,
-                   {25, 27, 32, 255});
+  const auto editor = window_->editor_snapshot();
+  WorkbenchFrame frame;
+  frame.items = projection_->snapshot();
+  frame.approval = approvals_->pending();
+  frame.session_id = session_.str();
+  frame.model = config_.model;
+  frame.trajectory_cursor = projection_->cursor();
+  frame.composition_epoch = ui_runtime_.epoch();
+  frame.snow_connected = embedded_snow_ != nullptr ||
+                         (snow_process_ && snow_process_->alive());
+  {
+    std::lock_guard lock(state_mutex_);
+    frame.status = status_;
+    frame.turn_active = turn_active_;
+    if (filter_input_)
+      file_filter_ = editor.value;
+    else
+      message_draft_ = editor.value;
+    frame.message_input = filter_input_ ? message_draft_ : editor.value;
+    frame.file_filter = filter_input_ ? editor.value : file_filter_;
+    if (!editor.composition.empty()) {
+      auto& active_text =
+          filter_input_ ? frame.file_filter : frame.message_input;
+      active_text.insert(std::min(editor.cursor, active_text.size()),
+                         editor.composition);
     }
-    y += box_height + 12;
-    if (y > static_cast<float>(surface.height()) - 90) break;
+    frame.sessions = sessions_;
+    frame.attachments.reserve(attachments_.size());
+    for (const auto& attachment : attachments_)
+      frame.attachments.push_back(
+          {attachment.name, attachment.content.size()});
+    frame.message_focused = !filter_input_ && editor.focused;
+    frame.filter_focused = filter_input_ && editor.focused;
   }
-  if (const auto pending = approvals_->pending()) {
-    surface.fill_rect({width - 340, 40, 316, 206},
-                      {255, 247, 220, 255}, 10);
-    surface.stroke_rect({width - 340, 40, 316, 206},
-                        {222, 173, 70, 255}, 1, 10);
-    surface.text("Approval required: " + pending->tool.name, width - 322, 68,
-                 16, {70, 50, 15, 255});
-    surface.text("Type /approve or /deny", width - 322, 94, 14,
-                 {90, 65, 20, 255});
-    surface.text(wrap(pending->reason, 39, 0), width - 322, 120, 13,
-                 {70, 55, 30, 255});
-    surface.text("Plan " + wrap(pending->details.canonical_plan_hash, 32, 0),
-                 width - 322, 144, 12, {70, 55, 30, 255});
-    surface.text("Sandbox " +
-                     wrap(pending->details.sandbox_plan.dump(), 32, 0),
-                 width - 322, 168, 12, {70, 55, 30, 255});
-    surface.text(wrap(pending->arguments.dump(), 39, 0), width - 322, 194, 13,
-                 {70, 55, 30, 255});
-  }
+  frame.editor_cursor = editor.cursor + editor.composition.size();
+  frame.selection_start = editor.selection_start;
+  frame.selection_end = editor.selection_end;
+  frame.caret_visible = editor.caret_visible;
+  workbench_.draw(surface, frame);
 }
 
 std::shared_ptr<snow::ModelProvider> App::create_model() const {

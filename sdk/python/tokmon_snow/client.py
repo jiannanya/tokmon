@@ -21,10 +21,12 @@ class SnowSession:
         self.id = session_id
 
     async def turn(self, message: str, *, model: str = "", max_steps: int = 32,
-                   model_parameters: dict[str, Any] | None = None) -> dict[str, Any]:
+                   model_parameters: dict[str, Any] | None = None,
+                   attachments: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         return await self.client.request("turn.start", {
             "session_id": self.id, "message": message, "model": model,
-            "max_steps": max_steps, "model_parameters": model_parameters or {}
+            "max_steps": max_steps, "model_parameters": model_parameters or {},
+            "attachments": attachments or []
         })
 
     async def cancel(self) -> bool:
@@ -173,6 +175,9 @@ class SnowClient:
     async def resume_session(self, session_id: str, after: int = 0) -> SnowSession:
         await self.request("session.resume", {"session_id": session_id, "after": after})
         return SnowSession(self, session_id)
+
+    async def list_sessions(self, limit: int = 100) -> list[dict[str, Any]]:
+        return await self.request("session.list", {"limit": limit})
 
     async def respond_approval(self, approval_id: str, approved: bool) -> bool:
         value = await self.request("approval.respond", {

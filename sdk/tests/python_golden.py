@@ -17,11 +17,17 @@ async def main() -> None:
         request_timeout=10)
     try:
         session = await client.create_session({"fixture": "python"})
-        turn = await session.turn("hello")
+        sessions = await client.list_sessions()
+        assert any(value["session_id"] == session.id for value in sessions)
+        turn = await session.turn(
+            "hello", attachments=[{"name": "context.txt",
+                                    "content": "python sdk context"}])
         assert turn["reason"] == "completed"
         events = await session.events()
         types = {event["type"] for event in events}
         assert {"session/header", "request/header", "assistant/message", "turn/end"} <= types
+        user = next(event for event in events if event["type"] == "user/message")
+        assert user["data"]["attachments"][0]["name"] == "context.txt"
         replay = await session.replay("R2")
         assert replay["control"]
     finally:

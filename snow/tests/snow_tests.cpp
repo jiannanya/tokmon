@@ -264,6 +264,11 @@ int main() {
   assert(has("tool/result"));
   assert(has("turn/end"));
   assert(has("run/end"));
+  const auto completed_turn = std::ranges::find_if(events, [](const auto& event) {
+    return event.type == "turn/end";
+  });
+  assert(completed_turn != events.end());
+  assert(completed_turn->data.value("elapsed_ms", std::int64_t{-1}) >= 0);
 
   const auto transcript = assembly.agent().transcript(session);
   assert(transcript.size() >= 4);
@@ -330,6 +335,15 @@ int main() {
                        {"method", "session.close"},
                        {"params", {{"session_id", child.str()}}}});
   assert(assembly.agent().events(child).back().type == "session/closed");
+  const auto listed_sessions = server.handle(
+      {{"jsonrpc", "2.0"}, {"id", 41}, {"method", "session.list"},
+       {"params", {{"limit", 100}}}});
+  assert(listed_sessions["result"].is_array());
+  assert(std::ranges::any_of(
+      listed_sessions["result"], [&](const auto& listed) {
+        return listed.value("session_id", "") == child.str() &&
+               listed.value("closed", false);
+      }));
   const auto protocol_blob = protocol_artifacts->put_text("chunked artifact");
   const auto blob_response = server.handle(
       {{"jsonrpc", "2.0"},
@@ -380,6 +394,51 @@ int main() {
   assert(composition_apply["result"]["actions"].empty());
   assert(std::filesystem::exists(
       config.data_root / "plugins" / "composition.lock.json"));
+
+  {
+    snow::BootstrapConfig attachment_config = config;
+    attachment_config.data_root = temporary / "attachment-data";
+    auto attachment_model = std::make_shared<snow::ScriptedModelProvider>(
+        std::vector<snow::ModelResponse>{{.content = "attachment received"}});
+    snow::Assembly attachment_assembly(attachment_config, attachment_model);
+    snow::ProtocolServer attachment_server(attachment_assembly.agent());
+    const auto attachment_session =
+        attachment_assembly.agent().create_session({{"title", "attachments"}});
+    const tokmon::Json attachment =
+        {{"name", "context.txt"},
+         {"sha256", tokmon::sha256_hex("durable context")},
+         {"content", "durable context"},
+         {"bytes", 15}};
+    const auto attachment_run = attachment_server.handle(
+        {{"jsonrpc", "2.0"},
+         {"id", 9},
+         {"method", "turn.start"},
+         {"params",
+          {{"session_id", attachment_session.str()},
+           {"message", "Use the attachment"},
+           {"attachments", tokmon::Json::array({attachment})}}}});
+    assert(attachment_run["result"]["reason"] == "completed");
+    const auto attachment_events =
+        attachment_assembly.agent().events(attachment_session);
+    const auto user_event = std::ranges::find_if(
+        attachment_events, [](const auto& event) {
+          return event.type == "user/message";
+        });
+    assert(user_event != attachment_events.end());
+    assert(user_event->data["attachments"][0]["name"] == "context.txt");
+    assert(attachment_model->requests().size() == 1);
+    const auto model_content = attachment_model->requests()[0]
+                                   .messages.back()["content"]
+                                   .get<std::string>();
+    assert(model_content.find("<attachment name=\"context.txt\"") !=
+           std::string::npos);
+    assert(model_content.find("durable context") != std::string::npos);
+    const auto summaries = attachment_assembly.agent().sessions();
+    assert(std::ranges::any_of(summaries, [&](const auto& summary) {
+      return summary.id == attachment_session && summary.last_seq > 0 &&
+             summary.header.value("title", "") == "attachments";
+    }));
+  }
 
   {
     auto protocol_approval =

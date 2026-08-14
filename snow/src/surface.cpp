@@ -16,8 +16,16 @@ std::vector<SurfaceItem> SurfaceProjection::project(
   std::vector<SurfaceItem> result;
   for (const auto& event : events) {
     if (event.type == "user/message" || event.type == "user/steer") {
+      auto content = event.data.value("content", "");
+      for (const auto& attachment :
+           event.data.value("attachments", tokmon::Json::array())) {
+        content += "\n\n<attachment name=\"" +
+                   attachment.value("name", "attachment") + "\" sha256=\"" +
+                   attachment.value("sha256", "") + "\">\n" +
+                   attachment.value("content", "") + "\n</attachment>";
+      }
       result.push_back({"event-" + std::to_string(event.seq), "user",
-                        event.data.value("content", ""), {event.seq}});
+                        std::move(content), {event.seq}});
     } else if (event.type == "assistant/message") {
       auto content = tokmon::Json::object();
       content["text"] = event.data.value("content", "");

@@ -34,6 +34,7 @@ enum class TurnEndReason {
 struct RunOptions {
   std::string model;
   tokmon::Json model_parameters{tokmon::Json::object()};
+  tokmon::Json attachments{tokmon::Json::array()};
   std::size_t max_steps{32};
 };
 
@@ -69,6 +70,8 @@ public:
                 RunOptions options = {}, std::stop_token stop = {});
   [[nodiscard]] std::vector<TrajectoryEvent> events(
       const tokmon::SessionId& session, std::uint64_t after = 0) const;
+  [[nodiscard]] std::vector<SessionSummary> sessions(
+      std::size_t limit = 100) const;
   [[nodiscard]] tokmon::Json transcript(
       const tokmon::SessionId& session) const;
   [[nodiscard]] ReplayReport replay(

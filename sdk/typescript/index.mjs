@@ -22,7 +22,8 @@ export class SnowSession {
         message,
         model: options.model ?? "",
         max_steps: options.maxSteps ?? 32,
-        model_parameters: options.modelParameters ?? {}
+        model_parameters: options.modelParameters ?? {},
+        attachments: options.attachments ?? []
       }, { signal: options.signal });
     } finally {
       options.signal?.removeEventListener("abort", onAbort);
@@ -200,6 +201,9 @@ export class SnowClient extends EventTarget {
   async resumeSession(sessionId, after = 0) {
     await this.request("session.resume", { session_id: sessionId, after });
     return new SnowSession(this, sessionId);
+  }
+  listSessions(limit = 100) {
+    return this.request("session.list", { limit });
   }
   async respondApproval(approvalId, approved) {
     const value = await this.request("approval.respond", {

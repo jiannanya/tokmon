@@ -3,7 +3,8 @@ add_library(tokmon_client
   src/approval.cpp
   src/projection.cpp
   src/product_assembly.cpp
-  src/snow_client.cpp)
+  src/snow_client.cpp
+  src/workbench.cpp)
 add_library(tokmon::client ALIAS tokmon_client)
 
 target_include_directories(tokmon_client PUBLIC
@@ -38,5 +39,13 @@ if(TOKMON_BUILD_TESTS)
             --workspace ${CMAKE_CURRENT_BINARY_DIR}/headless-smoke-workspace
             --config-dir-name .tokmon)
   set_tests_properties(tokmon_headless_smoke PROPERTIES
+    ENVIRONMENT "SDL_VIDEODRIVER=dummy")
+  add_test(NAME tokmon_ui_screenshot
+    COMMAND tokmon_app --screenshot
+            ${CMAKE_CURRENT_BINARY_DIR}/tokmon-workbench.bmp
+            --screenshot-demo
+            --workspace ${CMAKE_CURRENT_BINARY_DIR}/ui-screenshot-workspace
+            --config-dir-name .tokmon)
+  set_tests_properties(tokmon_ui_screenshot PROPERTIES
     ENVIRONMENT "SDL_VIDEODRIVER=dummy")
 endif()

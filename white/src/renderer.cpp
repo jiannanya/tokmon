@@ -205,6 +205,25 @@ void RasterSurface::stroke_rect(const Rect& rect, Color value, float width,
       radius, paint);
 }
 
+void RasterSurface::line(float x1, float y1, float x2, float y2, Color value,
+                         float width) {
+  SkPaint paint;
+  paint.setAntiAlias(true);
+  paint.setColor(color(value));
+  paint.setStyle(SkPaint::kStroke_Style);
+  paint.setStrokeWidth(width);
+  impl_->surface->getCanvas()->drawLine(x1, y1, x2, y2, paint);
+}
+
+void RasterSurface::fill_circle(float center_x, float center_y, float radius,
+                                Color value) {
+  SkPaint paint;
+  paint.setAntiAlias(true);
+  paint.setColor(color(value));
+  paint.setStyle(SkPaint::kFill_Style);
+  impl_->surface->getCanvas()->drawCircle(center_x, center_y, radius, paint);
+}
+
 void RasterSurface::text(std::string_view value, float x, float baseline,
                          float size, Color text_color) {
   SkPaint paint;
@@ -215,6 +234,123 @@ void RasterSurface::text(std::string_view value, float x, float baseline,
   impl_->surface->getCanvas()->drawString(std::string(value).c_str(), x,
                                           baseline, font, paint);
 }
+
+float RasterSurface::paragraph(std::string_view value, const Rect& bounds,
+                               float size, Color text_color, int weight,
+                               float line_height, std::size_t max_lines,
+                               TextAlign align, bool monospace) {
+  using namespace skia::textlayout;
+  ParagraphStyle paragraph_style;
+  switch (align) {
+  case white::TextAlign::center:
+    paragraph_style.setTextAlign(skia::textlayout::TextAlign::kCenter);
+    break;
+  case white::TextAlign::right:
+    paragraph_style.setTextAlign(skia::textlayout::TextAlign::kRight);
+    break;
+  default:
+    paragraph_style.setTextAlign(skia::textlayout::TextAlign::kLeft);
+    break;
+  }
+  if (max_lines > 0) {
+    paragraph_style.setMaxLines(max_lines);
+    paragraph_style.setEllipsis(SkString("…"));
+  }
+  TextStyle text_style;
+  text_style.setColor(color(text_color));
+  text_style.setFontSize(size);
+  text_style.setHeight(line_height);
+  text_style.setHeightOverride(true);
+  text_style.setFontStyle(
+      SkFontStyle(weight, SkFontStyle::kNormal_Width,
+                  SkFontStyle::kUpright_Slant));
+  if (monospace) {
+    text_style.setFontFamilies(
+        {SkString("Cascadia Mono"), SkString("Consolas"),
+         SkString("Noto Sans Mono CJK SC"), SkString("monospace")});
+  } else {
+    text_style.setFontFamilies(
+        {SkString("Segoe UI"), SkString("Microsoft YaHei UI"),
+         SkString("Noto Sans CJK SC"), SkString("Noto Sans"),
+         SkString("sans-serif")});
+  }
+  paragraph_style.setTextStyle(text_style);
+  auto builder = ParagraphBuilder::make(
+      paragraph_style, font_collection(), SkUnicodes::ICU::Make());
+  builder->pushStyle(text_style);
+  builder->addText(value.data(), value.size());
+  auto paragraph = builder->Build();
+  paragraph->layout(std::max(1.0F, bounds.width));
+  paragraph->paint(impl_->surface->getCanvas(), bounds.x, bounds.y);
+  return paragraph->getHeight();
+}
+
+float RasterSurface::rich_paragraph(std::span<const RichTextSpan> spans,
+                                    const Rect& bounds, float line_height,
+                                    std::size_t max_lines, TextAlign align) {
+  using namespace skia::textlayout;
+  ParagraphStyle paragraph_style;
+  switch (align) {
+  case white::TextAlign::center:
+    paragraph_style.setTextAlign(skia::textlayout::TextAlign::kCenter);
+    break;
+  case white::TextAlign::right:
+    paragraph_style.setTextAlign(skia::textlayout::TextAlign::kRight);
+    break;
+  default:
+    paragraph_style.setTextAlign(skia::textlayout::TextAlign::kLeft);
+    break;
+  }
+  if (max_lines > 0) {
+    paragraph_style.setMaxLines(max_lines);
+    paragraph_style.setEllipsis(SkString("…"));
+  }
+  auto builder = ParagraphBuilder::make(
+      paragraph_style, font_collection(), SkUnicodes::ICU::Make());
+  for (const auto& span : spans) {
+    TextStyle style;
+    style.setColor(color(span.color));
+    style.setFontSize(span.size);
+    style.setHeight(line_height);
+    style.setHeightOverride(true);
+    style.setFontStyle(
+        SkFontStyle(span.weight, SkFontStyle::kNormal_Width,
+                    SkFontStyle::kUpright_Slant));
+    if (span.monospace) {
+      style.setFontFamilies(
+          {SkString("Cascadia Mono"), SkString("Consolas"),
+           SkString("Noto Sans Mono CJK SC"), SkString("monospace")});
+    } else {
+      style.setFontFamilies(
+          {SkString("Segoe UI"), SkString("Microsoft YaHei UI"),
+           SkString("Noto Sans CJK SC"), SkString("Noto Sans"),
+           SkString("sans-serif")});
+    }
+    if (span.background) {
+      SkPaint background;
+      background.setColor(color(*span.background));
+      background.setAntiAlias(true);
+      style.setBackgroundPaint(std::move(background));
+    }
+    builder->pushStyle(style);
+    builder->addText(span.text.data(), span.text.size());
+    builder->pop();
+  }
+  auto paragraph = builder->Build();
+  paragraph->layout(std::max(1.0F, bounds.width));
+  paragraph->paint(impl_->surface->getCanvas(), bounds.x, bounds.y);
+  return paragraph->getHeight();
+}
+
+void RasterSurface::push_clip(const Rect& rect) {
+  auto* canvas = impl_->surface->getCanvas();
+  canvas->save();
+  canvas->clipRect(
+      SkRect::MakeXYWH(rect.x, rect.y, rect.width, rect.height),
+      SkClipOp::kIntersect, true);
+}
+
+void RasterSurface::pop_clip() { impl_->surface->getCanvas()->restore(); }
 
 void RasterSurface::render(const Document& document) {
   render_node(*impl_->surface->getCanvas(), document.root());

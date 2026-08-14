@@ -1,7 +1,9 @@
 #include <tokmon/approval.hpp>
 #include <tokmon/projection.hpp>
 #include <tokmon/snow_client.hpp>
+#include <tokmon/workbench.hpp>
 #include <tokmon/product_assembly.hpp>
+#include <tokmon/common/digest.hpp>
 #include <tokmon/common/files.hpp>
 #include <white/assembly.hpp>
 
@@ -24,6 +26,8 @@ int main() {
     value.seq = seq;
     value.type = std::move(type);
     value.session_id = session;
+    value.turn_id = tokmon::TurnId("turn");
+    value.time = "2026-08-14T14:54:00.000Z";
     value.data = std::move(data);
     return value;
   };
@@ -37,11 +41,19 @@ int main() {
   assert(snapshot[1].content == "hello");
   assert(snapshot[1].status == "committed");
   assert(projection.cursor() == 4);
-  projection.apply(event(5, "plugin.example/custom",
+  projection.apply(event(5, "turn/end",
+                         {{"reason", "completed"}, {"elapsed_ms", 2450}}));
+  snapshot = projection.snapshot();
+  assert(snapshot[1].metadata["elapsed_ms"] == 2450);
+  assert(snapshot[0].metadata["time"] == "2026-08-14T14:54:00.000Z");
+  projection.apply(event(6, "plugin.example/custom",
                          {{"value", 42}, {"message", "fallback"}}));
   snapshot = projection.snapshot();
   assert(snapshot.size() == 3);
   assert(snapshot.back().title == "Event / plugin.example/custom");
+  projection.apply(event(7, "session/header", {{"composition_epoch", 1}}));
+  projection.apply(event(8, "session/end", {{"reason", "closed"}}));
+  assert(projection.snapshot().size() == 3);
 
   auto approvals = std::make_shared<tokmon::desktop::ApprovalCoordinator>();
   snow::ToolDefinition tool{"write_file", "write", tokmon::Json::object()};
@@ -80,6 +92,179 @@ int main() {
     assert(composed_runtime.fibers().size() == 7);
   }
 
+  {
+    const auto ui_root = std::filesystem::temp_directory_path() /
+                         ("tokmon-workbench-test-" + tokmon::make_uuid());
+    std::filesystem::create_directories(ui_root / "docs");
+    tokmon::write_text_file_atomic(
+        ui_root / "README.md",
+        "# Tokmon\n\nArche Agent OS 工作台\n\n```json\n{\"ok\":true}\n```\n");
+    tokmon::desktop::WorkbenchView workbench(ui_root);
+    const auto desktop_layout = workbench.layout(1500, 900);
+    assert(desktop_layout.viewer_visible);
+    assert(desktop_layout.conversation.width >= 500);
+    assert(desktop_layout.document.width > 0);
+    const auto narrow_layout = workbench.layout(900, 700);
+    assert(!narrow_layout.viewer_visible);
+    assert(narrow_layout.conversation.width > 600);
+
+    white::RasterSurface workbench_surface(1500, 900);
+    tokmon::desktop::WorkbenchFrame frame;
+    frame.items = snapshot;
+    frame.items[1].content =
+        "已完成 Tokmon 对话流。\n\n主要能力：\n\n- **用户消息**使用右侧气泡。\n"
+        "- 助手正文支持 `Shift+Enter`、[设计文档](docs/design.md) 和项目符号。";
+    frame.items[1].metadata["elapsed_ms"] = 2450;
+    frame.session_id = "session";
+    frame.status = "Snow connected";
+    frame.message_input = "hello world";
+    frame.model = "gpt-5";
+    frame.snow_connected = true;
+    frame.message_focused = true;
+    frame.caret_visible = true;
+    frame.editor_cursor = 5;
+    frame.selection_start = 5;
+    frame.selection_end = 5;
+    frame.sessions.push_back(
+        {"other-session", "Recent session", "now", 12, false});
+    frame.trajectory_cursor = projection.cursor();
+    frame.composition_epoch = 7;
+    workbench.draw(workbench_surface, frame);
+    assert(workbench_surface.pixels() != nullptr);
+    assert(workbench.selected_document() == std::filesystem::path("README.md"));
+    const auto surface_hash = [&] {
+      const auto* bytes =
+          static_cast<const unsigned char*>(workbench_surface.pixels());
+      const auto size = workbench_surface.row_bytes() *
+                        static_cast<std::size_t>(workbench_surface.height());
+      std::uint64_t hash = 1469598103934665603ULL;
+      for (std::size_t index = 0; index < size; ++index) {
+        hash ^= bytes[index];
+        hash *= 1099511628211ULL;
+      }
+      return hash;
+    };
+    const auto assert_hover_changes = [&](std::string_view control,
+                                           const auto& hover_frame, float x,
+                                           float y) {
+      auto hover_action = workbench.dispatch({"pointermove", -10, -10});
+      assert(hover_action.kind ==
+             tokmon::desktop::WorkbenchActionKind::redraw);
+      workbench.draw(workbench_surface, hover_frame);
+      const auto normal_hash = surface_hash();
+      hover_action = workbench.dispatch({"pointermove", x, y});
+      assert(hover_action.kind ==
+             tokmon::desktop::WorkbenchActionKind::redraw);
+      workbench.draw(workbench_surface, hover_frame);
+      if (surface_hash() == normal_hash)
+        std::cerr << "Missing hover pixels for " << control << " at " << x
+                  << ',' << y << '\n';
+      assert(surface_hash() != normal_hash);
+    };
+    const float user_bubble_right = desktop_layout.timeline.x +
+                                    desktop_layout.timeline.width - 24;
+    // Menu commands, message tools, primary send action and viewer controls
+    // all provide visible pointer feedback, not just click hit targets.
+    assert_hover_changes("menu", frame, 125, 18);
+    assert_hover_changes("message-copy", frame, user_bubble_right - 37,
+                         desktop_layout.timeline.y + 79);
+    assert_hover_changes("send", frame, desktop_layout.composer.x +
+                                    desktop_layout.composer.width - 25,
+                         desktop_layout.composer.y + 63);
+    assert_hover_changes("viewer-tab", frame, desktop_layout.viewer.x + 130,
+                         desktop_layout.viewer.y + 23);
+    assert_hover_changes("viewer-tab-close", frame,
+                         desktop_layout.viewer.x + 181,
+                         desktop_layout.viewer.y + 23);
+    assert_hover_changes("explorer-search", frame,
+                         desktop_layout.explorer.x + 30,
+                         desktop_layout.explorer.y + 25);
+    auto attachment_frame = frame;
+    attachment_frame.attachments.push_back({"note.txt", 12});
+    assert_hover_changes("attachment-remove", attachment_frame,
+                         desktop_layout.composer.x + 45,
+                         desktop_layout.composer.y - 17);
+    auto approval_frame = frame;
+    approval_frame.approval = tokmon::desktop::PendingApproval{
+        "approval", {"write_file", "write", tokmon::Json::object()},
+        {{"path", "note.txt"}}, "需要写入工作区", {}};
+    const auto approval_width =
+        std::min(420.0F, desktop_layout.conversation.width - 60);
+    const auto approval_x = desktop_layout.conversation.x +
+                            (desktop_layout.conversation.width -
+                             approval_width) /
+                                2;
+    assert_hover_changes("approval-primary", approval_frame,
+                         approval_x + approval_width - 57,
+                         desktop_layout.conversation.y + 304);
+    auto action = workbench.dispatch(
+        {"click", user_bubble_right - 37,
+         desktop_layout.timeline.y + 79});
+    assert(action.kind == tokmon::desktop::WorkbenchActionKind::copy_text);
+    assert(action.value == "hello");
+    action = workbench.dispatch({"click", 20, 125});
+    assert(action.kind == tokmon::desktop::WorkbenchActionKind::new_session);
+    action = workbench.dispatch(
+        {"wheel", desktop_layout.timeline.x + 10,
+         desktop_layout.timeline.y + 10, 0, 48});
+    assert(action.kind == tokmon::desktop::WorkbenchActionKind::redraw);
+    action = workbench.dispatch(
+        {"pointerdown", desktop_layout.composer.x + 30,
+         desktop_layout.composer.y + 20});
+    assert(action.kind ==
+           tokmon::desktop::WorkbenchActionKind::focus_message);
+    assert(action.cursor <= frame.message_input.size());
+    action = workbench.dispatch(
+        {"pointermove", desktop_layout.composer.x + 80,
+         desktop_layout.composer.y + 20});
+    assert(action.kind ==
+           tokmon::desktop::WorkbenchActionKind::set_editor_cursor);
+    assert(action.extend_selection);
+    (void)workbench.dispatch({"click", desktop_layout.composer.x + 80,
+                              desktop_layout.composer.y + 20});
+    action = workbench.dispatch(
+        {"click", desktop_layout.composer.x + 25,
+         desktop_layout.composer.y + 63});
+    assert(action.kind ==
+           tokmon::desktop::WorkbenchActionKind::attach_files);
+    action = workbench.dispatch({"click", 270, 18});
+    assert(action.kind == tokmon::desktop::WorkbenchActionKind::show_help);
+    auto long_frame = frame;
+    long_frame.items[1].content.clear();
+    for (int line = 0; line < 40; ++line)
+      long_frame.items[1].content +=
+          "- Long assistant output keeps the conversation scrollable.\n";
+    workbench.draw(workbench_surface, long_frame);
+    assert_hover_changes("scroll-to-tail", long_frame,
+                         desktop_layout.timeline.x +
+                             desktop_layout.timeline.width / 2,
+                         desktop_layout.composer.y - 27);
+    action = workbench.dispatch(
+        {"click", desktop_layout.timeline.x +
+                      desktop_layout.timeline.width / 2,
+         desktop_layout.composer.y - 27});
+    assert(action.kind == tokmon::desktop::WorkbenchActionKind::redraw);
+    tokmon::desktop::WorkbenchFrame empty_frame;
+    empty_frame.session_id = "empty";
+    empty_frame.message_focused = true;
+    workbench.draw(workbench_surface, empty_frame);
+    assert_hover_changes("suggestion", empty_frame,
+                         desktop_layout.timeline.x +
+                             desktop_layout.timeline.width / 2,
+                         desktop_layout.timeline.y + 249);
+    action = workbench.dispatch(
+        {"click", desktop_layout.timeline.x +
+                      desktop_layout.timeline.width / 2,
+         desktop_layout.timeline.y + 249});
+    assert(action.kind ==
+           tokmon::desktop::WorkbenchActionKind::set_message_input);
+    assert(!action.value.empty());
+    assert(workbench.show_document(ui_root / "README.md"));
+    assert(!workbench.show_document(
+        std::filesystem::temp_directory_path() / "outside.md"));
+    std::filesystem::remove_all(ui_root);
+  }
+
 #ifdef TOKMON_TEST_SNOW_EXE
   const auto process_root =
       std::filesystem::temp_directory_path() /
@@ -110,13 +295,30 @@ int main() {
   assert(initialized.at("selected_protocol") == 1);
   const auto created = client.request("session.create");
   const auto child_session = created.at("session_id").get<std::string>();
-  const auto turn = client.request(
-      "turn.start", {{"session_id", child_session}, {"message", "hello"}});
+  const auto listed = client.request("session.list", {{"limit", 10}});
+  assert(listed.is_array());
+  assert(std::ranges::any_of(listed, [&](const auto& item) {
+    return item.value("session_id", "") == child_session;
+  }));
+  const tokmon::Json process_attachment =
+      {{"name", "context.txt"},
+       {"content", "process attachment"},
+       {"sha256", tokmon::sha256_hex("process attachment")}};
+  const tokmon::Json turn_parameters =
+      {{"session_id", child_session},
+       {"message", "hello"},
+       {"attachments", tokmon::Json::array({process_attachment})}};
+  const auto turn = client.request("turn.start", turn_parameters);
   assert(turn.at("reason") == "completed");
   const auto child_events = client.request(
       "session.events", {{"session_id", child_session}, {"after", 0}});
   assert(child_events.is_array());
   assert(!child_events.empty());
+  assert(std::ranges::any_of(child_events, [](const auto& event) {
+    return event.value("type", "") == "user/message" &&
+           event["data"].value("attachments", tokmon::Json::array()).size() ==
+               1;
+  }));
   const auto cursor = child_events.back().at("seq").get<std::uint64_t>();
 
 #ifdef _WIN32

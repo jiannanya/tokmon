@@ -174,7 +174,7 @@ tokmon::Json ProtocolServer::handle(const tokmon::Json& request) {
                           "client and server protocol ranges do not overlap");
     }
     std::vector<std::string> capabilities{
-        "session.create", "session.resume", "session.fork",
+        "session.create", "session.list", "session.resume", "session.fork",
         "session.close", "session.events", "session.transcript",
         "session.replay", "turn.start", "turn.cancel", "turn.steer",
         "artifact.read", "diagnostics.inspect"};
@@ -193,6 +193,20 @@ tokmon::Json ProtocolServer::handle(const tokmon::Json& request) {
         {"session_id",
          agent.create_session(params.value("metadata", tokmon::Json::object()))
              .str()}};
+  } else if (method == "session.list") {
+    result = tokmon::Json::array();
+    for (const auto& session :
+         agent.sessions(params.value("limit", std::size_t{100}))) {
+      tokmon::Json item{{"session_id", session.id.str()},
+                        {"created_at", session.created_at},
+                        {"header", session.header},
+                        {"last_seq", session.last_seq},
+                        {"closed", session.closed_at.has_value()}};
+      if (session.parent_id)
+        item["parent_session_id"] = session.parent_id->str();
+      if (session.closed_at) item["closed_at"] = *session.closed_at;
+      result.push_back(std::move(item));
+    }
   } else if (method == "session.resume") {
     const tokmon::SessionId session(params.at("session_id").get<std::string>());
     const auto events = agent.events(session, params.value("after", 0ULL));
@@ -235,6 +249,25 @@ tokmon::Json ProtocolServer::handle(const tokmon::Json& request) {
     options.max_steps = params.value("max_steps", 32U);
     options.model_parameters =
         params.value("model_parameters", tokmon::Json::object());
+    options.attachments =
+        params.value("attachments", tokmon::Json::array());
+    if (!options.attachments.is_array() || options.attachments.size() > 8)
+      throw tokmon::Error("snow.turn.attachments",
+                          "attachments must be an array with at most 8 items");
+    std::size_t attachment_bytes = 0;
+    for (const auto& attachment : options.attachments) {
+      if (!attachment.is_object() ||
+          !attachment.contains("content") ||
+          !attachment.at("content").is_string())
+        throw tokmon::Error("snow.turn.attachments",
+                            "each attachment must contain text content");
+      attachment_bytes += attachment.at("content").get_ref<
+                              const std::string&>()
+                              .size();
+    }
+    if (attachment_bytes > 2U * 1024U * 1024U)
+      throw tokmon::Error("snow.turn.attachments",
+                          "attachment content exceeds 2 MiB");
     const auto run = agent.run(
         session, params.at("message").get<std::string>(), options,
         source.get_token());

@@ -3,6 +3,7 @@
 #include <tokmon/common/digest.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <future>
 
 namespace snow {
@@ -101,6 +102,7 @@ bool Agent::has_active_runs() const {
 RunResult Agent::run(const tokmon::SessionId& session,
                      std::string user_message, RunOptions options,
                      std::stop_token stop) {
+  const auto turn_started_at = std::chrono::steady_clock::now();
   (void)journal_->session_header(session);
   if (options.max_steps == 0) {
     options.max_steps = config_.max_steps;
@@ -155,7 +157,8 @@ RunResult Agent::run(const tokmon::SessionId& session,
       if (step_index == 0) {
         auto user = base_event("user/message", session, trace, run, turn);
         user.step_id = step;
-        user.data = {{"content", user_message}};
+        user.data = {{"content", user_message},
+                     {"attachments", options.attachments}};
         append(std::move(user));
       }
 
@@ -332,7 +335,11 @@ RunResult Agent::run(const tokmon::SessionId& session,
   result.final_text = safe_final.get<std::string>();
   auto turn_end = base_event("turn/end", session, trace, run, turn);
   turn_end.data = {{"reason", to_string(result.reason)},
-                   {"final_text", result.final_text}};
+                   {"final_text", result.final_text},
+                   {"elapsed_ms",
+                    std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - turn_started_at)
+                        .count()}};
   append(std::move(turn_end));
   auto run_end = base_event("run/end", session, trace, run, turn);
   run_end.data = {{"reason", to_string(result.reason)}};
@@ -344,6 +351,10 @@ RunResult Agent::run(const tokmon::SessionId& session,
 std::vector<TrajectoryEvent> Agent::events(
     const tokmon::SessionId& session, std::uint64_t after) const {
   return journal_->events(session, after);
+}
+
+std::vector<SessionSummary> Agent::sessions(std::size_t limit) const {
+  return journal_->sessions(limit);
 }
 
 tokmon::Json Agent::transcript(const tokmon::SessionId& session) const {

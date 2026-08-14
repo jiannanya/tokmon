@@ -39,6 +39,15 @@ struct TrajectoryEvent {
   tokmon::Json data{tokmon::Json::object()};
 };
 
+struct SessionSummary {
+  tokmon::SessionId id;
+  std::optional<tokmon::SessionId> parent_id;
+  std::string created_at;
+  std::optional<std::string> closed_at;
+  tokmon::Json header{tokmon::Json::object()};
+  std::uint64_t last_seq{0};
+};
+
 void to_json(tokmon::Json& out, const TrajectoryEvent& event);
 void from_json(const tokmon::Json& in, TrajectoryEvent& event);
 
@@ -65,6 +74,8 @@ public:
   [[nodiscard]] std::uint64_t last_seq(
       const tokmon::SessionId& session) const;
   [[nodiscard]] bool session_exists(const tokmon::SessionId& session) const;
+  [[nodiscard]] std::vector<SessionSummary> sessions(
+      std::size_t limit = 100) const;
   void repair_interrupted_sessions();
   void close_session(const tokmon::SessionId& session);
   [[nodiscard]] axon::Signal<TrajectoryEvent>& committed() noexcept {

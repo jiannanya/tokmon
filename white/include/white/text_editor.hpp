@@ -23,8 +23,13 @@ public:
   void erase_forward();
   void move_left(bool extend = false);
   void move_right(bool extend = false);
+  void move_up(bool extend = false);
+  void move_down(bool extend = false);
   void move_home(bool extend = false);
   void move_end(bool extend = false);
+  void move_document_home(bool extend = false);
+  void move_document_end(bool extend = false);
+  void set_cursor(std::size_t byte_offset, bool extend = false);
   void select_all();
   void clear();
   void set_composition(std::string utf8);
@@ -38,6 +43,10 @@ private:
       std::string_view value, std::size_t position) noexcept;
   [[nodiscard]] static std::size_t next_boundary(
       std::string_view value, std::size_t position) noexcept;
+  [[nodiscard]] std::size_t line_column(std::size_t position) const noexcept;
+  [[nodiscard]] std::size_t position_at_column(
+      std::size_t line_start, std::size_t line_end,
+      std::size_t column) const noexcept;
 
   std::string value_;
   std::size_t cursor_{0};

@@ -15,12 +15,19 @@ void Projection::apply(const snow::TrajectoryEvent& event) {
   if (event.type == "user/message") {
     items_.push_back({tokmon::make_uuid(), ItemKind::user, "You",
                       event.data.value("content", ""), "committed",
-                      event.seq});
+                      event.seq,
+                      {{"attachments",
+                        event.data.value("attachments", tokmon::Json::array())},
+                       {"time", event.time},
+                       {"turn_id", event.turn_id ? event.turn_id->str() : ""}}});
   } else if (event.type == "assistant/chunk") {
     if (!streaming_assistant_) {
       streaming_assistant_ = items_.size();
       items_.push_back({tokmon::make_uuid(), ItemKind::assistant, "Snow", "",
-                        "streaming", event.seq});
+                        "streaming", event.seq,
+                        {{"time", event.time},
+                         {"turn_id",
+                          event.turn_id ? event.turn_id->str() : ""}}});
     }
     items_[*streaming_assistant_].content +=
         event.data.value("content", "");
@@ -32,10 +39,29 @@ void Projection::apply(const snow::TrajectoryEvent& event) {
       item.content = content;
       item.status = "committed";
       item.source_seq = event.seq;
+      item.metadata["completed_at"] = event.time;
       streaming_assistant_.reset();
     } else if (!content.empty()) {
       items_.push_back({tokmon::make_uuid(), ItemKind::assistant, "Snow",
-                        content, "committed", event.seq});
+                        content, "committed", event.seq,
+                        {{"time", event.time},
+                         {"completed_at", event.time},
+                         {"turn_id",
+                          event.turn_id ? event.turn_id->str() : ""}}});
+    }
+  } else if (event.type == "turn/end") {
+    const auto turn_id = event.turn_id ? event.turn_id->str() : "";
+    const auto assistant = std::ranges::find_if(
+        items_.rbegin(), items_.rend(), [&](const auto& item) {
+          return item.kind == ItemKind::assistant &&
+                 (turn_id.empty() ||
+                  item.metadata.value("turn_id", "") == turn_id);
+        });
+    if (assistant != items_.rend()) {
+      assistant->metadata["elapsed_ms"] =
+          event.data.value("elapsed_ms", std::int64_t{0});
+      assistant->metadata["completed_at"] = event.time;
+      assistant->metadata["reason"] = event.data.value("reason", "completed");
     }
   } else if (event.type == "tool/call") {
     items_.push_back(
@@ -97,7 +123,8 @@ void Projection::apply(const snow::TrajectoryEvent& event) {
                       event.seq});
   } else {
     static const std::set<std::string, std::less<>> canonical_internal = {
-        "session/created", "session/forked", "session/closed",
+        "session/header", "session/created", "session/forked",
+        "session/closed", "session/end", "session/end-seed",
         "run/start", "run/end", "turn/start", "turn/end", "step/start",
         "step/end", "request/header", "request/context", "model/request",
         "assistant/reasoning-chunk", "tool/normalized", "tool/admission",

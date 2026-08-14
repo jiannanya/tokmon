@@ -4,6 +4,7 @@
 #include <tokmon/projection.hpp>
 #include <tokmon/snow_client.hpp>
 #include <tokmon/product_assembly.hpp>
+#include <tokmon/workbench.hpp>
 
 #include <snow/assembly.hpp>
 #include <white/assembly.hpp>
@@ -16,6 +17,7 @@
 #include <optional>
 #include <stop_token>
 #include <thread>
+#include <vector>
 
 namespace tokmon::desktop {
 
@@ -43,6 +45,7 @@ public:
 
   int run();
   int smoke();
+  void capture(const std::filesystem::path& path);
   void submit(std::string message);
   [[nodiscard]] Projection& projection() noexcept { return *projection_; }
   [[nodiscard]] const tokmon::SessionId& session_id() const noexcept {
@@ -50,18 +53,26 @@ public:
   }
 
 private:
-  void start_turn(std::string message);
+  void start_turn(std::string message, tokmon::Json attachments);
   void connect_child(bool initial);
   void poll_child(std::stop_token stop);
   void supervise_child(std::stop_token stop);
   void apply_events(const tokmon::Json& events);
   void handle_notification(const tokmon::Json& notification);
   void update_status(std::string status);
+  void handle_workbench_event(const white::UiEvent& event);
+  void handle_editor_submit(std::string value);
+  void refresh_sessions();
+  void switch_session(std::string session_id);
+  void choose_attachments();
+  void choose_document();
+  void set_input_mode(bool filter);
   void persist_session() const;
   void draw(white::RasterSurface& surface);
   [[nodiscard]] std::shared_ptr<snow::ModelProvider> create_model() const;
 
   AppConfig config_;
+  WorkbenchView workbench_;
   arche::Runtime ui_runtime_{"tokmon"};
   white::Assembly white_;
   std::shared_ptr<ApprovalCoordinator> approvals_;
@@ -78,6 +89,17 @@ private:
   mutable std::mutex state_mutex_;
   std::condition_variable_any supervisor_ready_;
   std::string status_{"Ready"};
+  struct AttachedFile {
+    std::filesystem::path path;
+    std::string name;
+    std::string content;
+    std::string sha256;
+  };
+  std::vector<WorkbenchSession> sessions_;
+  std::vector<AttachedFile> attachments_;
+  std::string message_draft_;
+  std::string file_filter_;
+  bool filter_input_{false};
   bool turn_active_{false};
   bool restart_requested_{false};
   bool shutting_down_{false};

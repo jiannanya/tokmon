@@ -13,7 +13,26 @@ export interface TurnOptions {
   model?: string;
   maxSteps?: number;
   modelParameters?: Record<string, unknown>;
+  attachments?: readonly SnowAttachment[];
   signal?: AbortSignal;
+}
+
+export interface SnowAttachment {
+  name: string;
+  content: string;
+  sha256?: string;
+  path?: string;
+  bytes?: number;
+}
+
+export interface SessionSummary {
+  session_id: string;
+  parent_session_id?: string;
+  created_at: string;
+  closed_at?: string;
+  header: Record<string, unknown>;
+  last_seq: number;
+  closed: boolean;
 }
 
 export interface TurnResult {
@@ -45,6 +64,7 @@ export class SnowClient extends EventTarget {
   }): Promise<unknown>;
   createSession(metadata?: Record<string, unknown>): Promise<SnowSession>;
   resumeSession(sessionId: string, after?: number): Promise<SnowSession>;
+  listSessions(limit?: number): Promise<SessionSummary[]>;
   respondApproval(approvalId: string, approved: boolean): Promise<boolean>;
   readArtifact(reference: { sha256: string; bytes?: number; media_type?: string },
                offset?: number, limit?: number): Promise<Record<string, unknown>>;

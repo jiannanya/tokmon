@@ -540,6 +540,42 @@ bool TrajectoryJournal::session_exists(
   return sqlite3_step(statement.get()) == SQLITE_ROW;
 }
 
+std::vector<SessionSummary> TrajectoryJournal::sessions(
+    std::size_t limit) const {
+  std::lock_guard lock(mutex_);
+  Statement statement(database_handle_, R"SQL(
+    SELECT s.id, s.parent_id, s.created_at, s.closed_at, s.header_json,
+           COALESCE(MAX(e.seq), 0)
+      FROM sessions s
+      LEFT JOIN trajectory_events e ON e.session_id = s.id
+     GROUP BY s.id, s.parent_id, s.created_at, s.closed_at, s.header_json
+     ORDER BY s.created_at DESC
+     LIMIT ?
+  )SQL");
+  sqlite3_bind_int64(statement.get(), 1,
+                     static_cast<sqlite3_int64>(std::clamp<std::size_t>(
+                         limit, std::size_t{1}, std::size_t{1000})));
+  std::vector<SessionSummary> result;
+  while (sqlite3_step(statement.get()) == SQLITE_ROW) {
+    const auto text = [&](int column) -> std::string {
+      const auto* value = sqlite3_column_text(statement.get(), column);
+      return value ? reinterpret_cast<const char*>(value) : std::string{};
+    };
+    SessionSummary item;
+    item.id = tokmon::SessionId(text(0));
+    if (sqlite3_column_type(statement.get(), 1) != SQLITE_NULL)
+      item.parent_id = tokmon::SessionId(text(1));
+    item.created_at = text(2);
+    if (sqlite3_column_type(statement.get(), 3) != SQLITE_NULL)
+      item.closed_at = text(3);
+    item.header = tokmon::Json::parse(text(4));
+    item.last_seq = static_cast<std::uint64_t>(
+        sqlite3_column_int64(statement.get(), 5));
+    result.push_back(std::move(item));
+  }
+  return result;
+}
+
 void TrajectoryJournal::repair_interrupted_sessions() {
   std::vector<tokmon::SessionId> ids;
   {
