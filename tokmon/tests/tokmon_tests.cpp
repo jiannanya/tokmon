@@ -216,10 +216,17 @@ int main() {
     frame.composition_epoch = 7;
     workbench.draw(workbench_surface, frame);
     assert(workbench_surface.pixels() != nullptr);
-    white::RasterSurface narrow_surface(900, 700);
-    workbench.draw(narrow_surface, frame);
-    assert(narrow_surface.pixels() != nullptr);
-    // Restore desktop hit regions for the interaction checks below.
+    // Live resize keeps one physical render target while changing its logical
+    // viewport. Drawing across both responsive breakpoints must immediately
+    // select the compact sidebar and hide the viewer on that same surface.
+    workbench_surface.reconfigure(900, 700);
+    workbench.draw(workbench_surface, frame);
+    assert(workbench.layout(static_cast<float>(workbench_surface.width()),
+                            static_cast<float>(workbench_surface.height())) ==
+           narrow_layout);
+    assert(workbench_surface.pixels() != nullptr);
+    // Restore the desktop viewport and hit regions for interaction checks.
+    workbench_surface.reconfigure(1500, 900);
     workbench.draw(workbench_surface, frame);
     assert(workbench.selected_document() == std::filesystem::path("README.md"));
     const auto surface_hash = [&] {

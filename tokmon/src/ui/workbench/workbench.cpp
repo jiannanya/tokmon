@@ -709,9 +709,11 @@ WorkbenchView::~WorkbenchView() = default;
 
 WorkbenchLayout WorkbenchView::layout(float width, float height) const {
   WorkbenchLayout result;
-  result.compact_sidebar = width < 980 && !sidebar_manually_sized_;
+  result.compact_sidebar =
+      width < sidebar_compact_breakpoint && !sidebar_manually_sized_;
   const auto sidebar_content_reserve =
-      width >= 1160 && !viewer_collapsed_ ? 820.0F : 560.0F;
+      width >= viewer_visible_breakpoint && !viewer_collapsed_ ? 820.0F
+                                                               : 560.0F;
   const auto expanded_sidebar =
       std::clamp(sidebar_width_, 176.0F,
                  std::max(176.0F, width - sidebar_content_reserve));
@@ -719,7 +721,8 @@ WorkbenchLayout WorkbenchView::layout(float width, float height) const {
       sidebar_collapsed_ ? 0.0F
                          : (result.compact_sidebar ? 72.0F : expanded_sidebar);
   const float available = std::max(320.0F, width - sidebar_width);
-  result.viewer_visible = width >= 1160 && !viewer_collapsed_;
+  result.viewer_visible = width >= viewer_visible_breakpoint &&
+                          !viewer_collapsed_;
   float conversation_width = available;
   if (result.viewer_visible) {
     if (viewer_manually_sized_) {

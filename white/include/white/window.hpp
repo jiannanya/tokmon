@@ -103,9 +103,12 @@ private:
 #endif
   void begin_live_resize();
   void end_live_resize();
+  void commit_live_resize();
   void render_live_resize();
+  void resize_cpu_texture(int pixel_width, int pixel_height);
   void sync_drawable_size();
-  void render();
+  void render(bool responsive_preview = false, int target_pixel_width = 0,
+              int target_pixel_height = 0);
   void handle_key(std::uint32_t key, std::uint16_t modifiers);
 
   WindowOptions options_;
@@ -133,6 +136,7 @@ private:
   std::thread::id run_thread_{};
   int live_preview_width_{};
   int live_preview_height_{};
+  std::uint64_t last_live_resize_ns_{};
 #ifdef _WIN32
   void* native_window_handle_{nullptr};
   bool windows_message_hook_installed_{false};

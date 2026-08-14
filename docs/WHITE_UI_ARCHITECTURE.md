@@ -97,9 +97,14 @@ it and when it can remain deterministic.
   regions do not schedule frames.
 - Windows border resizing is woken on the initial non-client edge press and
   follows actual `WM_WINDOWPOSCHANGED` messages instead of a periodic timer.
-  Each change compositor-scales the pinned retained frame at low latency;
-  exact Yoga layout and high-resolution rasterization run once when the modal
-  resize ends. Other platforms retain the SDL live-resize expose fallback.
+  Every coalesced size recomputes HTML/CSS/Yoga layout and repaints against the
+  current logical viewport, so typography and controls retain their proportions
+  while responsive panels cross breakpoints during the drag. The physical
+  surface is retained as capacity while a pixel-exact viewport maps one-to-one
+  onto the native framebuffer; capacity grows with headroom only when needed,
+  avoiding both per-frame allocation and low-resolution scaling blur. The
+  modal resize exit synchronously submits the final exact high-DPI frame. Other
+  platforms retain the SDL live-resize expose fallback.
 - Normal desktop windows prefer Skia Ganesh/OpenGL. Unsupported, remote or
   headless environments automatically fall back to Skia raster plus SDL's
   accelerated presenter.

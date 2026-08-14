@@ -157,6 +157,9 @@ struct WorkbenchAction {
 // durable trajectory remains the canonical Agent state.
 class WorkbenchView final {
 public:
+  static constexpr int sidebar_compact_breakpoint = 980;
+  static constexpr int viewer_visible_breakpoint = 1160;
+
   explicit WorkbenchView(
       std::filesystem::path workspace,
       std::shared_ptr<white::NativeComponentRegistry> native_components = {});

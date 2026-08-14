@@ -293,7 +293,47 @@ int main() {
                              scaled_surface.row_bytes() +
                          static_cast<std::size_t>(sample_x) * 4;
     assert(sample[0] || sample[1] || sample[2] || sample[3]);
+
+    scaled_surface.reconfigure(400, 250);
+    assert(scaled_surface.width() == 400);
+    assert(scaled_surface.height() == 250);
+    assert(scaled_surface.pixel_width() == pixel_width);
+    assert(scaled_surface.pixel_height() == pixel_height);
+    assert(scaled_surface.viewport_pixel_width() == pixel_width);
+    assert(scaled_surface.viewport_pixel_height() == pixel_height);
+    scaled_surface.clear({255, 255, 255, 255});
+    scaled_surface.fill_rect({300, 180, 80, 50}, {20, 112, 226, 255}, 4);
+    assert(scaled_surface.pixels() != nullptr);
+
+    const int viewport_width = std::max(1, pixel_width - 40);
+    const int viewport_height = std::max(1, pixel_height - 30);
+    scaled_surface.reconfigure(320, 200, viewport_width, viewport_height);
+    assert(scaled_surface.pixel_width() == pixel_width);
+    assert(scaled_surface.pixel_height() == pixel_height);
+    assert(scaled_surface.viewport_pixel_width() == viewport_width);
+    assert(scaled_surface.viewport_pixel_height() == viewport_height);
   }
+
+  // A retained backing surface may be larger than the live window, but the
+  // active viewport must remain pixel-exact instead of stretching the whole
+  // capacity into the framebuffer.
+  white::RasterSurface viewport_surface(100, 100, 400, 300);
+  viewport_surface.reconfigure(100, 100, 200, 150);
+  viewport_surface.clear({0, 0, 0, 0});
+  viewport_surface.fill_rect({90, 90, 10, 10}, {20, 112, 226, 255});
+  const auto* viewport_pixels =
+      static_cast<const unsigned char*>(viewport_surface.pixels());
+  const auto viewport_sample = [&](int x, int y) {
+    return viewport_pixels + static_cast<std::size_t>(y) *
+                                 viewport_surface.row_bytes() +
+           static_cast<std::size_t>(x) * 4;
+  };
+  const auto* inside_viewport = viewport_sample(190, 142);
+  const auto* outside_viewport = viewport_sample(250, 200);
+  assert(inside_viewport[0] || inside_viewport[1] || inside_viewport[2] ||
+         inside_viewport[3]);
+  assert(outside_viewport[0] == 0 && outside_viewport[1] == 0 &&
+         outside_viewport[2] == 0 && outside_viewport[3] == 0);
 
   std::cout << "white_tests: ok\n";
   return 0;

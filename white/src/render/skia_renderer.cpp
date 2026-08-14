@@ -244,6 +244,8 @@ struct RasterSurface::Impl {
   int height{};
   int pixel_width{};
   int pixel_height{};
+  int viewport_pixel_width{};
+  int viewport_pixel_height{};
   SurfaceBackend backend{SurfaceBackend::cpu};
   int sample_count{};
   int stencil_bits{8};
@@ -299,6 +301,8 @@ void RasterSurface::resize(int width, int height, int pixel_width,
   impl_->height = std::max(1, height);
   impl_->pixel_width = std::max(1, pixel_width);
   impl_->pixel_height = std::max(1, pixel_height);
+  impl_->viewport_pixel_width = impl_->pixel_width;
+  impl_->viewport_pixel_height = impl_->pixel_height;
   if (impl_->backend == SurfaceBackend::gpu) {
     const auto image_info = SkImageInfo::Make(
         impl_->pixel_width, impl_->pixel_height, kRGBA_8888_SkColorType,
@@ -326,6 +330,30 @@ void RasterSurface::resize(int width, int height, int pixel_width,
           static_cast<float>(impl_->width),
       static_cast<float>(impl_->pixel_height) /
           static_cast<float>(impl_->height));
+  impl_->documents.clear();
+  impl_->readback.clear();
+  impl_->preview_image.reset();
+}
+
+void RasterSurface::reconfigure(int width, int height) {
+  reconfigure(width, height, impl_->pixel_width, impl_->pixel_height);
+}
+
+void RasterSurface::reconfigure(int width, int height,
+                                int viewport_pixel_width,
+                                int viewport_pixel_height) {
+  impl_->width = std::max(1, width);
+  impl_->height = std::max(1, height);
+  impl_->viewport_pixel_width =
+      std::clamp(viewport_pixel_width, 1, impl_->pixel_width);
+  impl_->viewport_pixel_height =
+      std::clamp(viewport_pixel_height, 1, impl_->pixel_height);
+  auto* canvas = impl_->surface->getCanvas();
+  canvas->resetMatrix();
+  canvas->scale(static_cast<float>(impl_->viewport_pixel_width) /
+                    static_cast<float>(impl_->width),
+                static_cast<float>(impl_->viewport_pixel_height) /
+                    static_cast<float>(impl_->height));
   impl_->documents.clear();
   impl_->readback.clear();
   impl_->preview_image.reset();
@@ -640,9 +668,12 @@ void RasterSurface::present_preview(int pixel_width, int pixel_height) {
   canvas->clear(SK_ColorTRANSPARENT);
   canvas->drawImageRect(
       impl_->preview_image,
+      SkRect::MakeWH(static_cast<float>(impl_->viewport_pixel_width),
+                     static_cast<float>(impl_->viewport_pixel_height)),
       SkRect::MakeWH(static_cast<float>(pixel_width),
                      static_cast<float>(pixel_height)),
-      SkSamplingOptions(SkFilterMode::kLinear), nullptr);
+      SkSamplingOptions(SkFilterMode::kNearest), nullptr,
+      SkCanvas::kStrict_SrcRectConstraint);
   impl_->gpu_context->flushAndSubmit(impl_->presentation_surface.get());
 }
 
@@ -655,6 +686,12 @@ int RasterSurface::height() const noexcept { return impl_->height; }
 int RasterSurface::pixel_width() const noexcept { return impl_->pixel_width; }
 int RasterSurface::pixel_height() const noexcept {
   return impl_->pixel_height;
+}
+int RasterSurface::viewport_pixel_width() const noexcept {
+  return impl_->viewport_pixel_width;
+}
+int RasterSurface::viewport_pixel_height() const noexcept {
+  return impl_->viewport_pixel_height;
 }
 const void* RasterSurface::pixels() const noexcept {
   if (impl_->backend == SurfaceBackend::gpu) {

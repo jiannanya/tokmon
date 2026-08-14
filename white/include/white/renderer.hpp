@@ -42,6 +42,12 @@ public:
 
   void resize(int width, int height);
   void resize(int width, int height, int pixel_width, int pixel_height);
+  // Changes the logical viewport while retaining the existing physical render
+  // target. The four-argument overload draws into a pixel-exact viewport at
+  // the top-left of a larger reusable backing surface.
+  void reconfigure(int width, int height);
+  void reconfigure(int width, int height, int viewport_pixel_width,
+                   int viewport_pixel_height);
   void clear(Color color);
   void fill_rect(const Rect& rect, Color color, float radius = 0);
   void stroke_rect(const Rect& rect, Color color, float width,
@@ -79,9 +85,9 @@ public:
   // Pins the last completed GPU frame before the native sizing loop starts so
   // the first resize message never pays snapshot setup cost.
   void prepare_preview();
-  // Presents the last completed GPU frame scaled to a temporary framebuffer
-  // size without reallocating or repainting the retained content surface.
-  // Used by native live-resize loops; it is a no-op for CPU surfaces.
+  // Presents the active pixel viewport to the current framebuffer without
+  // reallocating the retained backing surface. Used by native live-resize
+  // loops; it is a no-op for CPU surfaces.
   void present_preview(int pixel_width, int pixel_height);
   [[nodiscard]] SurfaceBackend backend() const noexcept;
 
@@ -89,6 +95,8 @@ public:
   [[nodiscard]] int height() const noexcept;
   [[nodiscard]] int pixel_width() const noexcept;
   [[nodiscard]] int pixel_height() const noexcept;
+  [[nodiscard]] int viewport_pixel_width() const noexcept;
+  [[nodiscard]] int viewport_pixel_height() const noexcept;
   [[nodiscard]] const void* pixels() const noexcept;
   [[nodiscard]] std::size_t row_bytes() const noexcept;
 

@@ -395,6 +395,10 @@ void Window::sync_drawable_size() {
   if (gl_context_) return;
 
   if (texture_ && !pixel_size_changed) return;
+  resize_cpu_texture(pixel_width, pixel_height);
+}
+
+void Window::resize_cpu_texture(int pixel_width, int pixel_height) {
   auto* texture = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_BGRA32,
                                     SDL_TEXTUREACCESS_STREAMING, pixel_width,
                                     pixel_height);
@@ -413,10 +417,9 @@ bool Window::live_resize_watch(void* userdata, SDL_Event* event) {
       event->window.windowID != SDL_GetWindowID(owner->window_))
     return true;
 #ifdef _WIN32
-  // Win32 is driven by actual size-change messages below. SDL's timer expose
-  // otherwise redraws continuously while the pointer is stationary and can
-  // starve the non-client sizing loop.
-  if (owner->windows_message_hook_installed_) return true;
+  // Actual size changes render immediately through the Win32 hook. The SDL
+  // timer is retained as a cheap catch-up signal when frame pacing coalesces
+  // the final size message; unchanged dimensions return without painting.
 #endif
   // SDL guarantees live-resize expose events originate on the main OS thread
   // and explicitly permits drawing from an event watcher. Windows' modal
@@ -434,8 +437,9 @@ bool Window::live_resize_watch(void* userdata, SDL_Event* event) {
 void Window::begin_live_resize() {
   if (live_resize_active_) return;
   live_resize_active_ = true;
-  live_preview_width_ = 0;
-  live_preview_height_ = 0;
+  live_preview_width_ = surface_ ? surface_->pixel_width() : 0;
+  live_preview_height_ = surface_ ? surface_->pixel_height() : 0;
+  last_live_resize_ns_ = 0;
   if (gl_context_)
     (void)SDL_GL_SetSwapInterval(0);
   else
@@ -452,7 +456,19 @@ void Window::end_live_resize() {
   live_resize_active_ = false;
   live_preview_width_ = 0;
   live_preview_height_ = 0;
+  last_live_resize_ns_ = 0;
   dirty_.store(true, std::memory_order_release);
+}
+
+void Window::commit_live_resize() {
+  end_live_resize();
+  // WM_EXITSIZEMOVE is the first point at which the final framebuffer size is
+  // stable. Resize the backing surface and submit the exact high-DPI frame
+  // here; merely marking the window dirty can otherwise leave SDL's normal
+  // event pump asleep until the next pointer event.
+  sync_drawable_size();
+  dirty_.store(false, std::memory_order_release);
+  render();
 }
 
 #ifdef _WIN32
@@ -498,7 +514,12 @@ bool Window::windows_message_hook(void* userdata, MSG* message) {
   case WM_CAPTURECHANGED:
     if (owner->native_resize_gesture_) {
       owner->native_resize_gesture_ = false;
-      owner->end_live_resize();
+      try {
+        owner->commit_live_resize();
+      } catch (...) {
+        owner->end_live_resize();
+        owner->dirty_.store(true, std::memory_order_release);
+      }
     }
     break;
   default:
@@ -527,22 +548,61 @@ void Window::render_live_resize() {
       live_preview_height_ == pixel_height)
     return;
 
-  // Do not rebuild Yoga or allocate a 4K content surface inside Windows'
-  // sizing message. Presenting the retained frame scaled to the current
-  // framebuffer keeps the border attached to the pointer. The queued resize
-  // event performs one exact layout/raster pass after the modal loop exits.
-  if (gl_context_) {
-    surface_->present_preview(pixel_width, pixel_height);
-    (void)SDL_GL_SwapWindow(window_);
-  } else {
-    SDL_SetRenderDrawColor(renderer_, 247, 248, 250, 255);
-    SDL_RenderClear(renderer_);
-    SDL_RenderTexture(renderer_, texture_, nullptr, nullptr);
-    SDL_RenderPresent(renderer_);
+  // Keep native messages responsive even on high-refresh mice. The SDL live
+  // resize timer calls this method again, so the newest coalesced size is
+  // always painted even if the pointer stops immediately after a skipped hit.
+  const auto now = SDL_GetTicksNS();
+  constexpr std::uint64_t minimum_interval_ns = 8'000'000;
+  if (last_live_resize_ns_ &&
+      now - last_live_resize_ns_ < minimum_interval_ns)
+    return;
+
+  display_scale_ = window_display_scale(window_);
+  const auto render_scale = display_scale_ * options_.ui_scale;
+  const int logical_width = std::max(
+      1, static_cast<int>(std::lround(static_cast<double>(pixel_width) /
+                                     render_scale)));
+  const int logical_height = std::max(
+      1, static_cast<int>(std::lround(static_cast<double>(pixel_height) /
+                                     render_scale)));
+
+  // Treat the physical surface as reusable capacity. The active pixel viewport
+  // always matches the native framebuffer exactly, so live text and hairlines
+  // are never enlarged from a lower-resolution intermediate image. Capacity
+  // grows with headroom only when the user drags beyond the previous maximum.
+  if (pixel_width > surface_->pixel_width() ||
+      pixel_height > surface_->pixel_height()) {
+    const auto grow = [](int capacity, int required) {
+      const auto headroom = std::max(256, capacity / 4);
+      return std::max(required, capacity + headroom);
+    };
+    const int capacity_width =
+        pixel_width > surface_->pixel_width()
+            ? grow(surface_->pixel_width(), pixel_width)
+            : surface_->pixel_width();
+    const int capacity_height =
+        pixel_height > surface_->pixel_height()
+            ? grow(surface_->pixel_height(), pixel_height)
+            : surface_->pixel_height();
+    surface_->resize(logical_width, logical_height, capacity_width,
+                     capacity_height);
+    if (!gl_context_)
+      resize_cpu_texture(capacity_width, capacity_height);
   }
+  surface_->reconfigure(logical_width, logical_height, pixel_width,
+                        pixel_height);
+
+  // Draw against every coalesced logical size into a pixel-exact viewport, so
+  // fonts, icons, borders and radii retain both their layout proportions and
+  // native framebuffer sharpness.
+  // Clear the frame request before drawing so a concurrent invalidation stays
+  // pending, while this completed resize frame does not trigger an immediate
+  // non-preview presentation of the larger backing capacity.
+  dirty_.store(false, std::memory_order_release);
+  render(true, pixel_width, pixel_height);
   live_preview_width_ = pixel_width;
   live_preview_height_ = pixel_height;
-  dirty_.store(true, std::memory_order_release);
+  last_live_resize_ns_ = SDL_GetTicksNS();
 }
 
 int Window::run() {
@@ -674,7 +734,8 @@ int Window::run() {
   return 0;
 }
 
-void Window::render() {
+void Window::render(bool responsive_preview, int target_pixel_width,
+                    int target_pixel_height) {
   DrawCallback draw;
   std::string input;
   std::string status;
@@ -709,14 +770,17 @@ void Window::render() {
   }
 
   if (gl_context_) {
-    surface_->flush();
+    if (responsive_preview)
+      surface_->present_preview(target_pixel_width, target_pixel_height);
+    else
+      surface_->flush();
     (void)SDL_GL_SwapWindow(window_);
     return;
   }
   const auto damage = surface_->frame_damage();
   const auto* pixels = static_cast<const std::byte*>(surface_->pixels());
   const auto pitch = static_cast<int>(surface_->row_bytes());
-  if (damage.empty() || damage.full()) {
+  if (responsive_preview || damage.empty() || damage.full()) {
     SDL_UpdateTexture(texture_, nullptr, pixels, pitch);
   } else {
     const auto scale_x = static_cast<float>(surface_->pixel_width()) /
@@ -747,7 +811,14 @@ void Window::render() {
   }
   SDL_SetRenderDrawColor(renderer_, 247, 248, 250, 255);
   SDL_RenderClear(renderer_);
-  SDL_RenderTexture(renderer_, texture_, nullptr, nullptr);
+  if (responsive_preview) {
+    const SDL_FRect source{
+        0, 0, static_cast<float>(surface_->viewport_pixel_width()),
+        static_cast<float>(surface_->viewport_pixel_height())};
+    SDL_RenderTexture(renderer_, texture_, &source, nullptr);
+  } else {
+    SDL_RenderTexture(renderer_, texture_, nullptr, nullptr);
+  }
   SDL_RenderPresent(renderer_);
 }
 
