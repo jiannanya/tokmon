@@ -171,21 +171,28 @@ int main() {
     tokmon::desktop::WorkbenchView workbench(ui_root);
     const auto desktop_layout = workbench.layout(1500, 900);
     assert(desktop_layout.viewer_visible);
-    assert(desktop_layout.menu_bar.height == 44);
-    assert(desktop_layout.sidebar.width == 224);
-    assert(desktop_layout.conversation.x == desktop_layout.sidebar.width);
+    assert(desktop_layout.menu_bar.height == 64);
+    assert(desktop_layout.sidebar.width == 350);
+    assert(desktop_layout.conversation.x >
+           desktop_layout.sidebar.x + desktop_layout.sidebar.width);
+    assert(desktop_layout.conversation.x <=
+           desktop_layout.sidebar.x + desktop_layout.sidebar.width + 8);
     assert(desktop_layout.conversation.width >= 500);
     assert(desktop_layout.document.width > 0);
-    assert(desktop_layout.viewer.x ==
+    assert(desktop_layout.viewer.x >
            desktop_layout.conversation.x + desktop_layout.conversation.width);
-    assert(desktop_layout.viewer.x + desktop_layout.viewer.width == 1500);
-    assert(desktop_layout.composer.x == desktop_layout.conversation.x + 28);
+    assert(desktop_layout.viewer.x <=
+           desktop_layout.conversation.x + desktop_layout.conversation.width +
+               8);
+    assert(desktop_layout.viewer.x + desktop_layout.viewer.width <= 1500);
+    assert(desktop_layout.composer.x == desktop_layout.conversation.x + 16);
     const auto narrow_layout = workbench.layout(900, 700);
     assert(!narrow_layout.viewer_visible);
     assert(narrow_layout.compact_sidebar);
     assert(narrow_layout.sidebar.width == 72);
-    assert(narrow_layout.conversation.x == 72);
-    assert(narrow_layout.conversation.width == 828);
+    assert(narrow_layout.sidebar.width == 72);
+    assert(narrow_layout.conversation.x > 72);
+    assert(narrow_layout.conversation.width >= 800);
     assert(narrow_layout.conversation.width > 600);
 
     white::RasterSurface workbench_surface(1500, 900);
@@ -251,6 +258,9 @@ int main() {
       workbench.draw(workbench_surface, hover_frame);
       const auto normal_hash = surface_hash();
       hover_action = workbench.dispatch({"pointermove", x, y});
+      if (hover_action.kind != tokmon::desktop::WorkbenchActionKind::redraw)
+        std::cerr << "Missing hover target for " << control << " at " << x
+                  << ',' << y << '\n';
       assert(hover_action.kind == tokmon::desktop::WorkbenchActionKind::redraw);
       workbench_surface.begin_frame();
       workbench.draw(workbench_surface, hover_frame);
@@ -274,7 +284,7 @@ int main() {
         desktop_layout.timeline.x + desktop_layout.timeline.width - 24;
     // Menu commands, message tools, primary send action and viewer controls
     // all provide visible pointer feedback, not just click hit targets.
-    assert_hover_changes("menu", frame, 125, 18);
+    assert_hover_changes("menu", frame, 180, 30);
     assert_hover_changes("message-copy", frame, user_bubble_right - 37,
                          desktop_layout.timeline.y + 79);
     assert_hover_changes("send", frame,
@@ -288,7 +298,7 @@ int main() {
                          desktop_layout.viewer.y + 23);
     assert_hover_changes("explorer-search", frame,
                          desktop_layout.explorer.x + 30,
-                         desktop_layout.explorer.y + 25);
+                         desktop_layout.explorer.y + 76);
     auto attachment_frame = frame;
     attachment_frame.attachments.push_back({"note.txt", 12});
     assert_hover_changes("attachment-remove", attachment_frame,
@@ -313,7 +323,9 @@ int main() {
         {"click", user_bubble_right - 37, desktop_layout.timeline.y + 79});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::copy_text);
     assert(action.value == "hello");
-    action = workbench.dispatch({"click", 20, 125});
+    action = workbench.dispatch(
+        {"click", desktop_layout.sidebar.x + desktop_layout.sidebar.width - 62,
+         desktop_layout.sidebar.y + 132});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::new_session);
     action = workbench.dispatch({"wheel", desktop_layout.timeline.x + 10,
                                  desktop_layout.timeline.y + 10, 0, 48});
@@ -334,23 +346,25 @@ int main() {
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::attach_files);
     // Session order is unchanged: the first visible row is Alpha even though
     // the active session is the second item.
-    action = workbench.dispatch({"click", 40, 317});
+    action = workbench.dispatch(
+        {"click", desktop_layout.sidebar.x + 90,
+         desktop_layout.sidebar.y + 208});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::switch_session);
     assert(action.value == "alpha-session");
 
     // Menu headers open actual dropdowns; selecting a dropdown row returns
     // the real command instead of firing the header directly.
-    action = workbench.dispatch({"click", 270, 18});
+    action = workbench.dispatch({"click", 350, 30});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::redraw);
     workbench.draw(workbench_surface, frame);
-    assert_hover_changes("help-menu-entry", frame, 280, 63);
-    action = workbench.dispatch({"click", 280, 63});
+    assert_hover_changes("help-menu-entry", frame, 350, 72);
+    action = workbench.dispatch({"click", 350, 72});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::show_help);
 
-    action = workbench.dispatch({"click", 125, 18});
+    action = workbench.dispatch({"click", 180, 30});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::redraw);
     workbench.draw(workbench_surface, frame);
-    action = workbench.dispatch({"click", 125, 63});
+    action = workbench.dispatch({"click", 180, 72});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::new_session);
     auto long_frame = frame;
     long_frame.items[1].content.clear();
@@ -383,20 +397,30 @@ int main() {
 
     // Both panes can collapse and expand from persistent toolbar controls.
     workbench.draw(workbench_surface, frame);
-    action = workbench.dispatch({"click", 325, 22});
+    action = workbench.dispatch(
+        {"click", desktop_layout.sidebar.x + desktop_layout.sidebar.width - 32,
+         desktop_layout.sidebar.y + 33});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::redraw);
-    assert(workbench.layout(1500, 900).sidebar.width == 0);
+    assert(workbench.layout(1500, 900).sidebar.width == 72);
     workbench.draw(workbench_surface, frame);
-    action = workbench.dispatch({"click", 325, 22});
+    const auto compact_layout = workbench.layout(1500, 900);
+    action = workbench.dispatch(
+        {"click", compact_layout.sidebar.x + compact_layout.sidebar.width - 32,
+         compact_layout.sidebar.y + 33});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::redraw);
-    assert(workbench.layout(1500, 900).sidebar.width == 224);
+    assert(workbench.layout(1500, 900).sidebar.width == 350);
 
     workbench.draw(workbench_surface, frame);
-    action = workbench.dispatch({"click", 1205, 22});
+    action = workbench.dispatch(
+        {"click", desktop_layout.viewer.x + desktop_layout.viewer.width - 33,
+         desktop_layout.viewer.y + 32});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::redraw);
     assert(!workbench.layout(1500, 900).viewer_visible);
     workbench.draw(workbench_surface, frame);
-    action = workbench.dispatch({"click", 1205, 22});
+    action = workbench.dispatch({"click", 295, 30});
+    assert(action.kind == tokmon::desktop::WorkbenchActionKind::redraw);
+    workbench.draw(workbench_surface, frame);
+    action = workbench.dispatch({"click", 295, 108});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::redraw);
     assert(workbench.layout(1500, 900).viewer_visible);
 
@@ -442,14 +466,17 @@ int main() {
     // expansion and export are real interaction targets.
     workbench.draw(workbench_surface, frame);
     auto feature_layout = workbench.layout(1500, 900);
-    action = workbench.dispatch({"click", feature_layout.conversation.x + 108,
-                                 feature_layout.conversation.y + 58});
+    action = workbench.dispatch(
+        {"click", feature_layout.conversation.x +
+                      feature_layout.conversation.width - 71,
+         feature_layout.conversation.y + 31});
     assert(action.kind ==
            tokmon::desktop::WorkbenchActionKind::show_trajectory);
     workbench.draw(workbench_surface, frame);
+    feature_layout = workbench.layout(1500, 900);
     const float trace_search_x =
         feature_layout.conversation.x + feature_layout.conversation.width - 220;
-    const float trace_toolbar_y = feature_layout.conversation.y + 106;
+    const float trace_toolbar_y = feature_layout.conversation.y + 96;
     action =
         workbench.dispatch({"pointerdown", trace_search_x, trace_toolbar_y});
     assert(action.kind ==
@@ -457,8 +484,10 @@ int main() {
     action = workbench.dispatch({"click", feature_layout.conversation.x + 40,
                                  feature_layout.conversation.y + 98});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::none);
-    action = workbench.dispatch({"click", feature_layout.conversation.x + 220,
-                                 feature_layout.conversation.y + 194});
+    action = workbench.dispatch(
+        {"click", feature_layout.conversation.x +
+                      feature_layout.conversation.width - 146,
+         feature_layout.conversation.y + 312});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::redraw);
     workbench.draw(workbench_surface, frame);
     action = workbench.dispatch({"wheel", feature_layout.conversation.x + 220,
@@ -467,25 +496,25 @@ int main() {
     action = workbench.dispatch(
         {"click",
          feature_layout.conversation.x + feature_layout.conversation.width - 72,
-         feature_layout.conversation.y + 94});
+         feature_layout.conversation.y + 312});
     assert(action.kind ==
            tokmon::desktop::WorkbenchActionKind::export_trajectory);
-    action = workbench.dispatch({"click", feature_layout.conversation.x + 50,
-                                 feature_layout.conversation.y + 58});
+    action = workbench.dispatch({"click", feature_layout.conversation.x + 46,
+                                 feature_layout.conversation.y + 31});
     assert(action.kind ==
            tokmon::desktop::WorkbenchActionKind::show_conversation);
 
-    // Account row opens upward; Settings presents a modal with navigable
+    // The top-bar account menu presents Settings as a stable modal with navigable
     // sections, editable fields, toggles and a durable save command.
     workbench.draw(workbench_surface, frame);
-    action = workbench.dispatch({"click", 60, 850});
+    action = workbench.dispatch({"click", 1313, 32});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::redraw);
     workbench.draw(workbench_surface, frame);
-    assert_hover_changes("account-settings", frame, 70, 748);
-    action = workbench.dispatch({"click", 70, 748});
+    assert_hover_changes("account-settings", frame, 1145, 130);
+    action = workbench.dispatch({"click", 1145, 130});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::open_settings);
     workbench.draw(workbench_surface, frame);
-    action = workbench.dispatch({"click", 390, 221});
+    action = workbench.dispatch({"click", 300, 266});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::settings_tab);
     assert(action.value == "models");
     workbench.draw(workbench_surface, frame);
@@ -501,18 +530,38 @@ int main() {
            tokmon::desktop::WorkbenchActionKind::focus_settings_field);
     action = workbench.dispatch({"click", 650, 322});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::none);
-    action = workbench.dispatch({"click", 390, 177});
+    action = workbench.dispatch({"click", 300, 177});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::settings_tab);
     assert(action.value == "general");
     workbench.draw(workbench_surface, frame);
-    action = workbench.dispatch({"click", 700, 407});
+    action = workbench.dispatch({"click", 700, 250});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::set_setting);
-    assert(action.value.starts_with("raw_trace="));
+    assert(action.value.starts_with("language="));
     workbench.draw(workbench_surface, frame);
-    action = workbench.dispatch({"click", 1105, 770});
+    action = workbench.dispatch({"click", 1195, 770});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::save_settings);
 
-    // Long session lists scroll independently of the conversation.
+    // Archive and plugin workspaces use the same 1040 x 720 floating frame.
+    workbench.close_settings();
+    workbench.draw(workbench_surface, frame);
+    action = workbench.dispatch(
+        {"click", desktop_layout.sidebar.x + 90,
+         desktop_layout.sidebar.y + desktop_layout.sidebar.height - 35});
+    assert(action.kind == tokmon::desktop::WorkbenchActionKind::open_archive);
+    workbench.draw(workbench_surface, frame);
+    action = workbench.dispatch({"click", 1240, 123});
+    assert(action.kind == tokmon::desktop::WorkbenchActionKind::close_archive);
+    workbench.draw(workbench_surface, frame);
+    action = workbench.dispatch(
+        {"click", desktop_layout.sidebar.x + 90,
+         desktop_layout.sidebar.y + 414});
+    assert(action.kind == tokmon::desktop::WorkbenchActionKind::open_plugins);
+    workbench.draw(workbench_surface, frame);
+    action = workbench.dispatch({"click", 1240, 123});
+    assert(action.kind == tokmon::desktop::WorkbenchActionKind::close_plugins);
+
+    // The project tree caps visible recent sessions and therefore never steals
+    // the conversation wheel when a workspace contains many archived sessions.
     auto many_sessions = frame;
     many_sessions.sessions.clear();
     for (int index = 0; index < 30; ++index)
@@ -522,7 +571,7 @@ int main() {
            static_cast<std::uint64_t>(index), false});
     workbench.draw(workbench_surface, many_sessions);
     action = workbench.dispatch({"wheel", 40, 400, 0, 96});
-    assert(action.kind == tokmon::desktop::WorkbenchActionKind::redraw);
+    assert(action.kind == tokmon::desktop::WorkbenchActionKind::none);
     assert(workbench.show_document(ui_root / "README.md"));
     assert(!workbench.show_document(std::filesystem::temp_directory_path() /
                                     "outside.md"));

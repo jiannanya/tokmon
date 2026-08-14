@@ -130,6 +130,10 @@ enum class WorkbenchActionKind {
   window_close,
   open_settings,
   close_settings,
+  open_archive,
+  close_archive,
+  open_plugins,
+  close_plugins,
   save_settings,
   open_config_file,
   focus_settings_field,
@@ -142,6 +146,7 @@ enum class WorkbenchActionKind {
   toggle_trajectory_event,
   toggle_profile_menu,
   settings_tab,
+  viewer_tab,
 };
 
 struct WorkbenchAction {
@@ -157,8 +162,8 @@ struct WorkbenchAction {
 // durable trajectory remains the canonical Agent state.
 class WorkbenchView final {
 public:
-  static constexpr int sidebar_compact_breakpoint = 980;
-  static constexpr int viewer_visible_breakpoint = 1160;
+  static constexpr int sidebar_compact_breakpoint = 1040;
+  static constexpr int viewer_visible_breakpoint = 1260;
 
   explicit WorkbenchView(
       std::filesystem::path workspace,
@@ -223,7 +228,7 @@ private:
   float session_max_scroll_{0};
   float pointer_x_{-1};
   float pointer_y_{-1};
-  float sidebar_width_{224};
+  float sidebar_width_{350};
   float viewer_width_{0};
   std::size_t previous_item_count_{0};
   std::size_t previous_trajectory_event_count_{0};
@@ -235,6 +240,8 @@ private:
   float trajectory_max_scroll_{0};
   bool profile_menu_open_{false};
   bool settings_open_{false};
+  bool archive_open_{false};
+  bool plugins_open_{false};
   bool trajectory_open_{false};
   bool follow_tail_{true};
   bool sidebar_collapsed_{false};
@@ -257,6 +264,7 @@ private:
   std::string settings_editor_text_;
   std::string settings_editor_field_;
   std::string trajectory_search_text_;
+  std::string viewer_tab_{"workspace"};
   std::size_t editor_cursor_{0};
   bool selecting_filter_{false};
   std::string selecting_editor_;
