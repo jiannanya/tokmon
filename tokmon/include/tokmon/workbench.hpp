@@ -34,6 +34,8 @@ struct WorkbenchAttachment {
 struct WorkbenchFrame {
   std::vector<ConversationItem> items;
   std::vector<snow::TrajectoryEvent> trajectory_events;
+  const std::vector<ConversationItem> *item_source{nullptr};
+  const std::vector<snow::TrajectoryEvent> *trajectory_event_source{nullptr};
   std::optional<PendingApproval> approval;
   std::string session_id;
   std::string status;
@@ -44,6 +46,7 @@ struct WorkbenchFrame {
   DesktopSettings settings;
   std::string active_settings_field;
   std::vector<WorkbenchSession> sessions;
+  const std::vector<WorkbenchSession> *session_source{nullptr};
   std::vector<WorkbenchAttachment> attachments;
   std::size_t editor_cursor{0};
   std::size_t selection_start{0};
@@ -58,6 +61,20 @@ struct WorkbenchFrame {
   bool settings_field_focused{false};
   bool caret_visible{true};
   bool window_maximized{false};
+
+  [[nodiscard]] const std::vector<ConversationItem> &conversation_items()
+      const noexcept {
+    return item_source ? *item_source : items;
+  }
+  [[nodiscard]] const std::vector<snow::TrajectoryEvent> &events()
+      const noexcept {
+    return trajectory_event_source ? *trajectory_event_source
+                                   : trajectory_events;
+  }
+  [[nodiscard]] const std::vector<WorkbenchSession> &session_items()
+      const noexcept {
+    return session_source ? *session_source : sessions;
+  }
 };
 
 struct WorkbenchLayout {
@@ -170,7 +187,9 @@ private:
   [[nodiscard]] std::size_t editor_offset_at(float x, float y,
                                              const white::Rect &bounds,
                                              std::string_view text) const;
-  [[nodiscard]] bool hovered(const white::Rect &bounds) const noexcept;
+  [[nodiscard]] bool hovered(const white::Rect &bounds) noexcept;
+  [[nodiscard]] std::optional<std::size_t>
+  hover_region_at(float x, float y) const noexcept;
 
   std::filesystem::path workspace_;
   std::unique_ptr<WorkbenchDocument> shell_;
@@ -180,6 +199,8 @@ private:
   std::set<std::filesystem::path> expanded_directories_;
   std::vector<std::string> document_lines_;
   std::vector<HitTarget> hits_;
+  std::vector<white::Rect> hover_regions_;
+  std::optional<std::size_t> active_hover_region_;
   WorkbenchLayout last_layout_;
   float timeline_scroll_{0};
   float timeline_max_scroll_{0};
@@ -209,6 +230,7 @@ private:
   bool viewer_manually_sized_{false};
   bool resizing_sidebar_{false};
   bool resizing_viewer_{false};
+  bool pointer_cursor_active_{false};
   bool selecting_input_{false};
   white::Rect message_editor_bounds_;
   white::Rect filter_editor_bounds_;
@@ -222,6 +244,7 @@ private:
   std::string settings_editor_text_;
   std::string settings_editor_field_;
   std::string trajectory_search_text_;
+  std::size_t editor_cursor_{0};
   bool selecting_filter_{false};
   std::string selecting_editor_;
   std::string last_filter_;

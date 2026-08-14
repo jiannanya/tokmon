@@ -215,6 +215,29 @@ int main() {
   assert(surface.pixels() != nullptr);
   assert(surface.row_bytes() >= 800 * 4);
 
+  for (const int scale_percent : {100, 125, 150, 200}) {
+    const int pixel_width = 320 * scale_percent / 100;
+    const int pixel_height = 200 * scale_percent / 100;
+    white::RasterSurface scaled_surface(320, 200, pixel_width, pixel_height);
+    scaled_surface.clear({0, 0, 0, 0});
+    scaled_surface.fill_rect({10, 10, 100, 40}, {20, 112, 226, 255}, 6);
+    assert(scaled_surface.width() == 320);
+    assert(scaled_surface.height() == 200);
+    assert(scaled_surface.pixel_width() == pixel_width);
+    assert(scaled_surface.pixel_height() == pixel_height);
+    assert(scaled_surface.pixels() != nullptr);
+    assert(scaled_surface.row_bytes() >=
+           static_cast<std::size_t>(pixel_width) * 4);
+    const int sample_x = 100 * scale_percent / 100;
+    const int sample_y = 25 * scale_percent / 100;
+    const auto* sample = static_cast<const unsigned char*>(
+        scaled_surface.pixels()) +
+                         static_cast<std::size_t>(sample_y) *
+                             scaled_surface.row_bytes() +
+                         static_cast<std::size_t>(sample_x) * 4;
+    assert(sample[0] || sample[1] || sample[2] || sample[3]);
+  }
+
   std::cout << "white_tests: ok\n";
   return 0;
 }

@@ -26,13 +26,18 @@ struct WindowOptions {
   int height{800};
   bool resizable{true};
   bool borderless{false};
+  // Product zoom applied on top of the operating system's display scale.
+  float ui_scale{1.0F};
+  // The draw callback covers every pixel, so the window can skip pre-clearing.
+  bool opaque_draw{false};
 };
 
 class Window final {
 public:
   using DrawCallback = std::function<void(RasterSurface&)>;
   using SubmitCallback = std::function<void(std::string)>;
-  using EventCallback = std::function<void(UiEvent)>;
+  // Return true only when the event changed visible state and needs a frame.
+  using EventCallback = std::function<bool(UiEvent)>;
   using FilesCallback =
       std::function<void(std::vector<std::filesystem::path>)>;
 
@@ -71,6 +76,7 @@ public:
   void choose_files(FilesCallback callback, bool allow_many = true,
                     const std::filesystem::path& initial_location = {});
   [[nodiscard]] float display_scale() const noexcept { return display_scale_; }
+  [[nodiscard]] float ui_scale() const noexcept { return options_.ui_scale; }
   void invalidate();
   void close();
   void render_once();
@@ -78,6 +84,7 @@ public:
   int run();
 
 private:
+  void sync_drawable_size();
   void render();
   void handle_key(std::uint32_t key, std::uint16_t modifiers);
 
@@ -100,6 +107,8 @@ private:
   std::atomic_bool running_{false};
   std::atomic_bool dirty_{true};
   float display_scale_{1};
+  float window_to_logical_x_{1};
+  float window_to_logical_y_{1};
 };
 
 } // namespace white

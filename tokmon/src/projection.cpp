@@ -161,6 +161,7 @@ void Projection::apply(const snow::TrajectoryEvent &event) {
                         event.ignorable ? "ignorable" : "required", event.seq});
     }
   }
+  ++revision_;
 }
 
 void Projection::append_local(ItemKind kind, std::string title,
@@ -170,6 +171,7 @@ void Projection::append_local(ItemKind kind, std::string title,
   items_.push_back({tokmon::make_uuid(), kind, std::move(title),
                     std::move(content), std::move(status), cursor_,
                     std::move(metadata)});
+  ++revision_;
 }
 
 void Projection::replay(const std::vector<snow::TrajectoryEvent> &events) {
@@ -189,9 +191,19 @@ std::vector<snow::TrajectoryEvent> Projection::event_snapshot() const {
   return events_;
 }
 
+ProjectionSnapshot Projection::snapshot_all() const {
+  std::lock_guard lock(mutex_);
+  return {items_, events_, cursor_, revision_};
+}
+
 std::uint64_t Projection::cursor() const noexcept {
   std::lock_guard lock(mutex_);
   return cursor_;
+}
+
+std::uint64_t Projection::revision() const noexcept {
+  std::lock_guard lock(mutex_);
+  return revision_;
 }
 
 void Projection::begin_fork() {
@@ -202,6 +214,7 @@ void Projection::begin_fork() {
   items_.push_back({tokmon::make_uuid(), ItemKind::status, "Session fork",
                     "A new branch was created from the durable cursor.",
                     "committed", 0});
+  ++revision_;
 }
 
 void Projection::clear() {
@@ -210,6 +223,7 @@ void Projection::clear() {
   events_.clear();
   streaming_assistant_.reset();
   cursor_ = 0;
+  ++revision_;
 }
 
 } // namespace tokmon::desktop

@@ -123,6 +123,8 @@ AppConfig load_app_config(const std::filesystem::path &workspace,
       std::chrono::milliseconds(restart.value("base_delay_ms", 250U));
   result.poll_interval =
       std::chrono::milliseconds(ui_config.value("poll_interval_ms", 25U));
+  result.ui_scale =
+      std::clamp(ui_config.value("scale", 1.25F), 0.75F, 2.0F);
   result.request_timeout = std::chrono::milliseconds(
       snow_config.value("request_timeout_ms", 300000U));
   result.model = document.value("model", "");
@@ -148,7 +150,9 @@ App::App(AppConfig config)
                                             .width = 1500,
                                             .height = 900,
                                             .resizable = true,
-                                            .borderless = true});
+                                            .borderless = true,
+                                            .ui_scale = config_.ui_scale,
+                                            .opaque_draw = true});
   white::RasterSurface brand_icon(32, 32);
   brand_icon.clear({0, 0, 0, 0});
   constexpr white::Color brand_ink{92, 95, 102, 255};
@@ -164,8 +168,9 @@ App::App(AppConfig config)
   window_->set_submit_callback([this](std::string message) {
     handle_editor_submit(std::move(message));
   });
-  window_->set_event_callback(
-      [this](white::UiEvent event) { handle_workbench_event(event); });
+  window_->set_event_callback([this](white::UiEvent event) {
+    return handle_workbench_event(event);
+  });
   approvals_->set_changed([this] {
     if (window_)
       window_->invalidate();
@@ -938,6 +943,7 @@ void App::refresh_sessions() {
     {
       std::lock_guard lock(state_mutex_);
       sessions_ = std::move(result);
+      ++sessions_revision_;
     }
     if (window_)
       window_->invalidate();
@@ -1052,7 +1058,7 @@ void App::choose_document() {
       false, config_.workspace);
 }
 
-void App::handle_workbench_event(const white::UiEvent &event) {
+bool App::handle_workbench_event(const white::UiEvent &event) {
   const auto action = workbench_.dispatch(event);
   if (action.pointer_cursor)
     window_->set_pointer_cursor(*action.pointer_cursor);
@@ -1234,6 +1240,7 @@ void App::handle_workbench_event(const white::UiEvent &event) {
   default:
     break;
   }
+  return action.kind != WorkbenchActionKind::none;
 }
 
 void App::persist_session() const {
@@ -1249,13 +1256,21 @@ void App::persist_session() const {
 
 void App::draw(white::RasterSurface &surface) {
   const auto editor = window_->editor_snapshot();
+  const auto projection_revision = projection_->revision();
+  if (projection_revision != cached_projection_revision_) {
+    auto snapshot = projection_->snapshot_all();
+    cached_projection_items_ = std::move(snapshot.items);
+    cached_projection_events_ = std::move(snapshot.events);
+    cached_projection_cursor_ = snapshot.cursor;
+    cached_projection_revision_ = snapshot.revision;
+  }
   WorkbenchFrame frame;
-  frame.items = projection_->snapshot();
-  frame.trajectory_events = projection_->event_snapshot();
+  frame.item_source = &cached_projection_items_;
+  frame.trajectory_event_source = &cached_projection_events_;
   frame.approval = approvals_->pending();
   frame.session_id = session_.str();
   frame.model = config_.model;
-  frame.trajectory_cursor = projection_->cursor();
+  frame.trajectory_cursor = cached_projection_cursor_;
   frame.composition_epoch = ui_runtime_.epoch();
   frame.snow_connected =
       embedded_snow_ != nullptr || (snow_process_ && snow_process_->alive());
@@ -1293,7 +1308,11 @@ void App::draw(white::RasterSurface &surface) {
         active_text->insert(std::min(editor.cursor, active_text->size()),
                             editor.composition);
     }
-    frame.sessions = sessions_;
+    if (cached_sessions_revision_ != sessions_revision_) {
+      cached_sessions_ = sessions_;
+      cached_sessions_revision_ = sessions_revision_;
+    }
+    frame.session_source = &cached_sessions_;
     frame.attachments.reserve(attachments_.size());
     for (const auto &attachment : attachments_)
       frame.attachments.push_back({attachment.name, attachment.content.size()});

@@ -33,6 +33,7 @@ struct AppConfig {
   std::size_t restart_max_attempts{5};
   std::chrono::milliseconds restart_base_delay{250};
   std::chrono::milliseconds poll_interval{25};
+  float ui_scale{1.25F};
   std::chrono::milliseconds request_timeout{std::chrono::minutes(5)};
   std::string model;
   std::size_t max_steps{32};
@@ -62,7 +63,7 @@ private:
   void apply_events(const tokmon::Json &events);
   void handle_notification(const tokmon::Json &notification);
   void update_status(std::string status);
-  void handle_workbench_event(const white::UiEvent &event);
+  [[nodiscard]] bool handle_workbench_event(const white::UiEvent &event);
   void handle_editor_submit(std::string value);
   void refresh_sessions();
   void switch_session(std::string session_id);
@@ -82,6 +83,12 @@ private:
   white::Assembly white_;
   std::shared_ptr<ApprovalCoordinator> approvals_;
   std::shared_ptr<Projection> projection_;
+  std::vector<ConversationItem> cached_projection_items_;
+  std::vector<snow::TrajectoryEvent> cached_projection_events_;
+  std::uint64_t cached_projection_cursor_{0};
+  std::uint64_t cached_projection_revision_{0};
+  std::vector<WorkbenchSession> cached_sessions_;
+  std::uint64_t cached_sessions_revision_{0};
   std::unique_ptr<snow::Assembly> embedded_snow_;
   std::shared_ptr<SnowProcessClient> snow_process_;
   std::unique_ptr<ProductAssembly> product_;
@@ -101,6 +108,7 @@ private:
     std::string sha256;
   };
   std::vector<WorkbenchSession> sessions_;
+  std::uint64_t sessions_revision_{0};
   std::vector<AttachedFile> attachments_;
   std::string message_draft_;
   std::string file_filter_;

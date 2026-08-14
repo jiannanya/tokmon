@@ -5,21 +5,54 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_dialog.h>
 
+#include <algorithm>
+#include <cmath>
 #include <memory>
 #include <thread>
 
 namespace white {
 namespace {
 
+float normalized_scale(float scale) {
+  return std::isfinite(scale) && scale > 0 ? scale : 1.0F;
+}
+
+float window_display_scale(SDL_Window* window) {
+  auto scale = SDL_GetWindowDisplayScale(window);
+  if (!std::isfinite(scale) || scale <= 0) {
+    const auto display = SDL_GetDisplayForWindow(window);
+    if (display) scale = SDL_GetDisplayContentScale(display);
+  }
+  return normalized_scale(scale);
+}
+
+float window_pixel_density(SDL_Window* window) {
+  return normalized_scale(SDL_GetWindowPixelDensity(window));
+}
+
+float window_units_per_logical_pixel(SDL_Window* window) {
+  return normalized_scale(window_display_scale(window) /
+                          window_pixel_density(window));
+}
+
+int scaled_dimension(int value, float scale) {
+  return std::max(
+      1, static_cast<int>(std::lround(static_cast<double>(value) * scale)));
+}
+
 SDL_HitTestResult SDLCALL borderless_hit_test(SDL_Window* window,
                                               const SDL_Point* point,
-                                              void*) {
+                                              void* userdata) {
   int width = 0;
   int height = 0;
   SDL_GetWindowSize(window, &width, &height);
   const bool maximized =
       (SDL_GetWindowFlags(window) & SDL_WINDOW_MAXIMIZED) != 0;
-  constexpr int edge = 6;
+  const auto* owner = static_cast<const Window*>(userdata);
+  const auto content_scale =
+      window_units_per_logical_pixel(window) *
+      normalized_scale(owner ? owner->ui_scale() : 1.0F);
+  const auto edge = scaled_dimension(6, content_scale);
   if (!maximized) {
     const bool left = point->x < edge;
     const bool right = point->x >= width - edge;
@@ -36,7 +69,9 @@ SDL_HitTestResult SDLCALL borderless_hit_test(SDL_Window* window,
   }
   // Menus and window controls remain normal hit targets. The quiet center of
   // Tokmon's application bar behaves as the native title-bar drag region.
-  if (point->y < 44 && point->x >= 340 && point->x < width - 320)
+  if (point->y < scaled_dimension(44, content_scale) &&
+      point->x >= scaled_dimension(340, content_scale) &&
+      point->x < width - scaled_dimension(320, content_scale))
     return SDL_HITTEST_DRAGGABLE;
   return SDL_HITTEST_NORMAL;
 }
@@ -44,10 +79,12 @@ SDL_HitTestResult SDLCALL borderless_hit_test(SDL_Window* window,
 } // namespace
 
 Window::Window(WindowOptions options) : options_(std::move(options)) {
+  options_.ui_scale = std::clamp(options_.ui_scale, 0.75F, 2.0F);
   if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS)) {
     throw tokmon::Error("white.sdl.init", SDL_GetError());
   }
   auto flags = static_cast<SDL_WindowFlags>(0);
+  flags |= SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN;
   if (options_.resizable) flags |= SDL_WINDOW_RESIZABLE;
   if (options_.borderless) flags |= SDL_WINDOW_BORDERLESS;
   window_ = SDL_CreateWindow(options_.title.c_str(), options_.width,
@@ -55,27 +92,29 @@ Window::Window(WindowOptions options) : options_(std::move(options)) {
   if (!window_) {
     throw tokmon::Error("white.sdl.window", SDL_GetError());
   }
-  if (options_.resizable)
-    (void)SDL_SetWindowMinimumSize(window_, 720, 480);
+  const auto initial_scale = window_units_per_logical_pixel(window_);
+  if (std::abs(initial_scale - 1.0F) > 0.001F) {
+    (void)SDL_SetWindowSize(window_,
+                            scaled_dimension(options_.width, initial_scale),
+                            scaled_dimension(options_.height, initial_scale));
+    (void)SDL_SetWindowPosition(window_, SDL_WINDOWPOS_CENTERED,
+                                SDL_WINDOWPOS_CENTERED);
+    (void)SDL_SyncWindow(window_);
+  }
   if (options_.borderless)
-    (void)SDL_SetWindowHitTest(window_, borderless_hit_test, nullptr);
+    (void)SDL_SetWindowHitTest(window_, borderless_hit_test, this);
+  (void)SDL_SetHint(SDL_HINT_MOUSE_DPI_SCALE_CURSORS, "1");
   default_cursor_ = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT);
   pointer_cursor_ = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_POINTER);
   renderer_ = SDL_CreateRenderer(window_, nullptr);
   if (!renderer_) {
     throw tokmon::Error("white.sdl.renderer", SDL_GetError());
   }
-  int pixel_width = options_.width;
-  int pixel_height = options_.height;
-  SDL_GetWindowSizeInPixels(window_, &pixel_width, &pixel_height);
-  display_scale_ = SDL_GetWindowDisplayScale(window_);
-  surface_ = std::make_unique<RasterSurface>(pixel_width, pixel_height);
-  texture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_BGRA32,
-                               SDL_TEXTUREACCESS_STREAMING, pixel_width,
-                               pixel_height);
-  if (!texture_) {
-    throw tokmon::Error("white.sdl.texture", SDL_GetError());
-  }
+  // Let presentation pace high-DPI full-surface uploads to the display. Input
+  // events are still drained and coalesced before each frame.
+  (void)SDL_SetRenderVSync(renderer_, 1);
+  sync_drawable_size();
+  (void)SDL_ShowWindow(window_);
   SDL_StartTextInput(window_);
 }
 
@@ -107,7 +146,7 @@ void Window::set_event_callback(EventCallback callback) {
 
 bool Window::set_icon(const RasterSurface& icon) {
   auto* native_icon = SDL_CreateSurfaceFrom(
-      icon.width(), icon.height(), SDL_PIXELFORMAT_BGRA32,
+      icon.pixel_width(), icon.pixel_height(), SDL_PIXELFORMAT_BGRA32,
       const_cast<void*>(icon.pixels()), static_cast<int>(icon.row_bytes()));
   if (!native_icon) return false;
   const auto applied = SDL_SetWindowIcon(window_, native_icon);
@@ -247,7 +286,8 @@ void Window::render_once() {
 void Window::save_screenshot(const std::filesystem::path& path) {
   render_once();
   auto* screenshot = SDL_CreateSurfaceFrom(
-      surface_->width(), surface_->height(), SDL_PIXELFORMAT_BGRA32,
+      surface_->pixel_width(), surface_->pixel_height(),
+      SDL_PIXELFORMAT_BGRA32,
       const_cast<void*>(surface_->pixels()),
       static_cast<int>(surface_->row_bytes()));
   if (!screenshot)
@@ -256,6 +296,63 @@ void Window::save_screenshot(const std::filesystem::path& path) {
   SDL_DestroySurface(screenshot);
   if (!saved)
     throw tokmon::Error("white.sdl.screenshot", SDL_GetError());
+}
+
+void Window::sync_drawable_size() {
+  int window_width = 1;
+  int window_height = 1;
+  int pixel_width = 1;
+  int pixel_height = 1;
+  (void)SDL_GetWindowSize(window_, &window_width, &window_height);
+  (void)SDL_GetWindowSizeInPixels(window_, &pixel_width, &pixel_height);
+  window_width = std::max(1, window_width);
+  window_height = std::max(1, window_height);
+  pixel_width = std::max(1, pixel_width);
+  pixel_height = std::max(1, pixel_height);
+
+  display_scale_ = window_display_scale(window_);
+  const auto render_scale = display_scale_ * options_.ui_scale;
+  const int width = std::max(
+      1, static_cast<int>(std::lround(static_cast<double>(pixel_width) /
+                                     render_scale)));
+  const int height = std::max(
+      1, static_cast<int>(std::lround(static_cast<double>(pixel_height) /
+                                     render_scale)));
+  window_to_logical_x_ = static_cast<float>(pixel_width) /
+                         static_cast<float>(window_width) / render_scale;
+  window_to_logical_y_ = static_cast<float>(pixel_height) /
+                         static_cast<float>(window_height) / render_scale;
+
+  if (options_.resizable) {
+    const auto minimum_width = scaled_dimension(
+        720, 1.0F / normalized_scale(window_to_logical_x_));
+    const auto minimum_height = scaled_dimension(
+        480, 1.0F / normalized_scale(window_to_logical_y_));
+    (void)SDL_SetWindowMinimumSize(window_, minimum_width, minimum_height);
+  }
+
+  const bool pixel_size_changed =
+      !surface_ || surface_->pixel_width() != pixel_width ||
+      surface_->pixel_height() != pixel_height;
+  const bool logical_size_changed =
+      !surface_ || surface_->width() != width || surface_->height() != height;
+  if (!pixel_size_changed && !logical_size_changed) return;
+
+  if (surface_)
+    surface_->resize(width, height, pixel_width, pixel_height);
+  else
+    surface_ = std::make_unique<RasterSurface>(width, height, pixel_width,
+                                               pixel_height);
+
+  if (texture_ && !pixel_size_changed) return;
+  auto* texture = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_BGRA32,
+                                    SDL_TEXTUREACCESS_STREAMING, pixel_width,
+                                    pixel_height);
+  if (!texture) {
+    throw tokmon::Error("white.sdl.texture", SDL_GetError());
+  }
+  if (texture_) SDL_DestroyTexture(texture_);
+  texture_ = texture;
 }
 
 int Window::run() {
@@ -270,17 +367,20 @@ int Window::run() {
         running_ = false;
         break;
       case SDL_EVENT_WINDOW_RESIZED:
-      case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED: {
-        int width = 1;
-        int height = 1;
-        SDL_GetWindowSizeInPixels(window_, &width, &height);
-        display_scale_ = SDL_GetWindowDisplayScale(window_);
-        surface_->resize(width, height);
-        if (texture_) SDL_DestroyTexture(texture_);
-        texture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_BGRA32,
-                                     SDL_TEXTUREACCESS_STREAMING, width,
-                                     height);
+      case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+      case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
+      case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED: {
+        sync_drawable_size();
         dirty_ = true;
+        break;
+      }
+      case SDL_EVENT_WINDOW_MOUSE_LEAVE: {
+        EventCallback callback;
+        {
+          std::lock_guard lock(mutex_);
+          callback = events_;
+        }
+        if (callback && callback(UiEvent{.type = "pointerleave"})) dirty_ = true;
         break;
       }
       case SDL_EVENT_MOUSE_MOTION:
@@ -294,28 +394,29 @@ int Window::run() {
         }
         if (callback) {
           UiEvent ui;
+          // SDL events use window coordinates. Convert them to the same
+          // display-independent coordinates used by layout and hit testing.
           if (event.type == SDL_EVENT_MOUSE_MOTION) {
             ui.type = "pointermove";
-            ui.x = event.motion.x * display_scale_;
-            ui.y = event.motion.y * display_scale_;
+            ui.x = event.motion.x * window_to_logical_x_;
+            ui.y = event.motion.y * window_to_logical_y_;
           } else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
             ui.type = "wheel";
             float mouse_x = 0;
             float mouse_y = 0;
             SDL_GetMouseState(&mouse_x, &mouse_y);
-            ui.x = mouse_x * display_scale_;
-            ui.y = mouse_y * display_scale_;
+            ui.x = mouse_x * window_to_logical_x_;
+            ui.y = mouse_y * window_to_logical_y_;
             ui.delta_x = event.wheel.x;
             ui.delta_y = -event.wheel.y * 48.0F;
           } else {
             ui.type = event.type == SDL_EVENT_MOUSE_BUTTON_DOWN
                           ? "pointerdown"
                           : "click";
-            ui.x = event.button.x * display_scale_;
-            ui.y = event.button.y * display_scale_;
+            ui.x = event.button.x * window_to_logical_x_;
+            ui.y = event.button.y * window_to_logical_y_;
           }
-          callback(std::move(ui));
-          dirty_ = true;
+          if (callback(std::move(ui))) dirty_ = true;
         }
         break;
       }
@@ -350,10 +451,11 @@ int Window::run() {
       next_caret = std::chrono::steady_clock::now() +
                    std::chrono::milliseconds(500);
     }
-    if (dirty_.exchange(false, std::memory_order_acq_rel)) {
+    const bool rendered = dirty_.exchange(false, std::memory_order_acq_rel);
+    if (rendered) {
       render();
     }
-    SDL_Delay(8);
+    SDL_Delay(rendered ? 1 : 8);
   }
   return 0;
 }
@@ -371,7 +473,7 @@ void Window::render() {
     status = status_;
     builtin_chrome = builtin_chrome_;
   }
-  surface_->clear({247, 248, 250, 255});
+  if (!options_.opaque_draw) surface_->clear({247, 248, 250, 255});
   if (draw) draw(*surface_);
 
   if (builtin_chrome) {

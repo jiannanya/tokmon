@@ -24,7 +24,10 @@
 #endif
 
 #include <algorithm>
+#include <limits>
 #include <stdexcept>
+#include <type_traits>
+#include <unordered_map>
 
 namespace white {
 namespace {
@@ -48,6 +51,24 @@ sk_sp<skia::textlayout::FontCollection> font_collection() {
     return value;
   }();
   return collection;
+}
+
+template <typename Value>
+void append_cache_key(std::string& key, const Value& value) {
+  static_assert(std::is_trivially_copyable_v<Value>);
+  key.append(reinterpret_cast<const char*>(&value), sizeof(value));
+}
+
+void append_cache_key(std::string& key, std::string_view value) {
+  append_cache_key(key, value.size());
+  key.append(value);
+}
+
+void append_cache_key(std::string& key, Color value) {
+  append_cache_key(key, value.red);
+  append_cache_key(key, value.green);
+  append_cache_key(key, value.blue);
+  append_cache_key(key, value.alpha);
 }
 
 void draw_shaped_text(SkCanvas& canvas, const Node& node, SkColor text_color) {
@@ -156,27 +177,82 @@ void render_node(SkCanvas& canvas, const Node& node) {
 } // namespace
 
 struct RasterSurface::Impl {
+  struct ParagraphEntry {
+    std::unique_ptr<skia::textlayout::Paragraph> paragraph;
+    std::uint64_t last_used{};
+  };
+
+  skia::textlayout::Paragraph* find_paragraph(const std::string& key) {
+    if (const auto found = paragraph_cache.find(key);
+        found != paragraph_cache.end()) {
+      found->second.last_used = ++paragraph_clock;
+      return found->second.paragraph.get();
+    }
+    return nullptr;
+  }
+
+  skia::textlayout::Paragraph& store_paragraph(
+      std::string key,
+      std::unique_ptr<skia::textlayout::Paragraph> paragraph) {
+    constexpr std::size_t cache_limit = 512;
+    if (paragraph_cache.size() >= cache_limit) {
+      const auto oldest = std::ranges::min_element(
+          paragraph_cache, {}, [](const auto& item) {
+            return item.second.last_used;
+      });
+      if (oldest != paragraph_cache.end()) paragraph_cache.erase(oldest);
+    }
+    const auto inserted = paragraph_cache
+                              .emplace(std::move(key),
+                                       ParagraphEntry{std::move(paragraph),
+                                                      ++paragraph_clock})
+                              .first;
+    return *inserted->second.paragraph;
+  }
+
   int width{};
   int height{};
+  int pixel_width{};
+  int pixel_height{};
   sk_sp<SkSurface> surface;
+  std::unordered_map<std::string, ParagraphEntry> paragraph_cache;
+  std::uint64_t paragraph_clock{};
+
+  Impl() { paragraph_cache.reserve(512); }
 };
 
 RasterSurface::RasterSurface(int width, int height)
+    : RasterSurface(width, height, width, height) {}
+
+RasterSurface::RasterSurface(int width, int height, int pixel_width,
+                             int pixel_height)
     : impl_(std::make_unique<Impl>()) {
-  resize(width, height);
+  resize(width, height, pixel_width, pixel_height);
 }
 RasterSurface::~RasterSurface() = default;
 RasterSurface::RasterSurface(RasterSurface&&) noexcept = default;
 RasterSurface& RasterSurface::operator=(RasterSurface&&) noexcept = default;
 
 void RasterSurface::resize(int width, int height) {
+  resize(width, height, width, height);
+}
+
+void RasterSurface::resize(int width, int height, int pixel_width,
+                           int pixel_height) {
   impl_->width = std::max(1, width);
   impl_->height = std::max(1, height);
+  impl_->pixel_width = std::max(1, pixel_width);
+  impl_->pixel_height = std::max(1, pixel_height);
   impl_->surface = SkSurfaces::Raster(
-      SkImageInfo::MakeN32Premul(impl_->width, impl_->height));
+      SkImageInfo::MakeN32Premul(impl_->pixel_width, impl_->pixel_height));
   if (!impl_->surface) {
     throw std::runtime_error("failed to create Skia raster surface");
   }
+  impl_->surface->getCanvas()->scale(
+      static_cast<float>(impl_->pixel_width) /
+          static_cast<float>(impl_->width),
+      static_cast<float>(impl_->pixel_height) /
+          static_cast<float>(impl_->height));
 }
 
 void RasterSurface::clear(Color value) {
@@ -240,6 +316,24 @@ float RasterSurface::paragraph(std::string_view value, const Rect& bounds,
                                float line_height, std::size_t max_lines,
                                TextAlign align, bool monospace) {
   using namespace skia::textlayout;
+  const auto layout_width =
+      std::max(1.0F, std::round(bounds.width / 4.0F) * 4.0F);
+  std::string cache_key;
+  cache_key.reserve(value.size() + 64);
+  cache_key.push_back('P');
+  append_cache_key(cache_key, value);
+  append_cache_key(cache_key, layout_width);
+  append_cache_key(cache_key, size);
+  append_cache_key(cache_key, text_color);
+  append_cache_key(cache_key, weight);
+  append_cache_key(cache_key, line_height);
+  append_cache_key(cache_key, max_lines);
+  append_cache_key(cache_key, align);
+  append_cache_key(cache_key, monospace);
+  if (auto* cached = impl_->find_paragraph(cache_key)) {
+    cached->paint(impl_->surface->getCanvas(), bounds.x, bounds.y);
+    return cached->getHeight();
+  }
   ParagraphStyle paragraph_style;
   switch (align) {
   case white::TextAlign::center:
@@ -280,15 +374,42 @@ float RasterSurface::paragraph(std::string_view value, const Rect& bounds,
   builder->pushStyle(text_style);
   builder->addText(value.data(), value.size());
   auto paragraph = builder->Build();
-  paragraph->layout(std::max(1.0F, bounds.width));
-  paragraph->paint(impl_->surface->getCanvas(), bounds.x, bounds.y);
-  return paragraph->getHeight();
+  paragraph->layout(layout_width);
+  auto& cached =
+      impl_->store_paragraph(std::move(cache_key), std::move(paragraph));
+  cached.paint(impl_->surface->getCanvas(), bounds.x, bounds.y);
+  return cached.getHeight();
 }
 
 float RasterSurface::rich_paragraph(std::span<const RichTextSpan> spans,
                                     const Rect& bounds, float line_height,
                                     std::size_t max_lines, TextAlign align) {
   using namespace skia::textlayout;
+  const auto layout_width =
+      std::max(1.0F, std::round(bounds.width / 4.0F) * 4.0F);
+  std::size_t text_size = 0;
+  for (const auto& span : spans) text_size += span.text.size();
+  std::string cache_key;
+  cache_key.reserve(text_size + spans.size() * 32 + 48);
+  cache_key.push_back('R');
+  append_cache_key(cache_key, layout_width);
+  append_cache_key(cache_key, line_height);
+  append_cache_key(cache_key, max_lines);
+  append_cache_key(cache_key, align);
+  append_cache_key(cache_key, spans.size());
+  for (const auto& span : spans) {
+    append_cache_key(cache_key, std::string_view(span.text));
+    append_cache_key(cache_key, span.size);
+    append_cache_key(cache_key, span.color);
+    append_cache_key(cache_key, span.weight);
+    append_cache_key(cache_key, span.monospace);
+    append_cache_key(cache_key, span.background.has_value());
+    if (span.background) append_cache_key(cache_key, *span.background);
+  }
+  if (auto* cached = impl_->find_paragraph(cache_key)) {
+    cached->paint(impl_->surface->getCanvas(), bounds.x, bounds.y);
+    return cached->getHeight();
+  }
   ParagraphStyle paragraph_style;
   switch (align) {
   case white::TextAlign::center:
@@ -337,9 +458,11 @@ float RasterSurface::rich_paragraph(std::span<const RichTextSpan> spans,
     builder->pop();
   }
   auto paragraph = builder->Build();
-  paragraph->layout(std::max(1.0F, bounds.width));
-  paragraph->paint(impl_->surface->getCanvas(), bounds.x, bounds.y);
-  return paragraph->getHeight();
+  paragraph->layout(layout_width);
+  auto& cached =
+      impl_->store_paragraph(std::move(cache_key), std::move(paragraph));
+  cached.paint(impl_->surface->getCanvas(), bounds.x, bounds.y);
+  return cached.getHeight();
 }
 
 void RasterSurface::push_clip(const Rect& rect) {
@@ -358,6 +481,10 @@ void RasterSurface::render(const Document& document) {
 
 int RasterSurface::width() const noexcept { return impl_->width; }
 int RasterSurface::height() const noexcept { return impl_->height; }
+int RasterSurface::pixel_width() const noexcept { return impl_->pixel_width; }
+int RasterSurface::pixel_height() const noexcept {
+  return impl_->pixel_height;
+}
 const void* RasterSurface::pixels() const noexcept {
   SkPixmap pixmap;
   if (!impl_->surface->peekPixels(&pixmap)) return nullptr;

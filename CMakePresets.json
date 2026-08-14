@@ -3,14 +3,23 @@
   "configurePresets": [
     {
       "name": "default",
-      "displayName": "Tokmon Debug",
+      "displayName": "Tokmon Desktop",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/default",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
         "TOKMON_BUILD_TESTS": "ON",
         "TOKMON_BUILD_GUI": "ON"
+      }
+    },
+    {
+      "name": "debug",
+      "inherits": "default",
+      "displayName": "Tokmon Debug",
+      "binaryDir": "${sourceDir}/build/debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
       }
     },
     {
@@ -29,6 +38,10 @@
       "configurePreset": "default"
     },
     {
+      "name": "debug",
+      "configurePreset": "debug"
+    },
+    {
       "name": "release",
       "configurePreset": "release"
     }
@@ -37,6 +50,20 @@
     {
       "name": "default",
       "configurePreset": "default",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "debug",
+      "configurePreset": "debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
       "output": {
         "outputOnFailure": true
       }

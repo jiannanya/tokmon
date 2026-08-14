@@ -24,7 +24,10 @@ struct RichTextSpan {
 
 class RasterSurface final {
 public:
+  // Drawing and layout use logical dimensions. The four-argument overload
+  // keeps those coordinates stable while rasterizing into a denser buffer.
   RasterSurface(int width, int height);
+  RasterSurface(int width, int height, int pixel_width, int pixel_height);
   ~RasterSurface();
   RasterSurface(RasterSurface&&) noexcept;
   RasterSurface& operator=(RasterSurface&&) noexcept;
@@ -32,6 +35,7 @@ public:
   RasterSurface& operator=(const RasterSurface&) = delete;
 
   void resize(int width, int height);
+  void resize(int width, int height, int pixel_width, int pixel_height);
   void clear(Color color);
   void fill_rect(const Rect& rect, Color color, float radius = 0);
   void stroke_rect(const Rect& rect, Color color, float width,
@@ -58,6 +62,8 @@ public:
 
   [[nodiscard]] int width() const noexcept;
   [[nodiscard]] int height() const noexcept;
+  [[nodiscard]] int pixel_width() const noexcept;
+  [[nodiscard]] int pixel_height() const noexcept;
   [[nodiscard]] const void* pixels() const noexcept;
   [[nodiscard]] std::size_t row_bytes() const noexcept;
 

@@ -13,6 +13,7 @@
     }
   },
   "ui": {
-    "poll_interval_ms": 25
+    "poll_interval_ms": 25,
+    "scale": 1.25
   }
 }

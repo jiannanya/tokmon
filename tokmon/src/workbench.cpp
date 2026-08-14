@@ -345,7 +345,7 @@ std::string elapsed_label(const ConversationItem &item) {
 }
 
 std::string normalized_title(const WorkbenchFrame &frame) {
-  for (const auto &item : frame.items) {
+  for (const auto &item : frame.conversation_items()) {
     if (item.kind != ItemKind::user || item.content.empty())
       continue;
     auto title = item.content;
@@ -624,6 +624,8 @@ void draw_editor_text(RasterSurface &surface, std::string_view text,
 WorkbenchView::WorkbenchView(std::filesystem::path workspace)
     : workspace_(std::filesystem::weakly_canonical(std::move(workspace))),
       shell_(std::make_unique<WorkbenchDocument>()) {
+  hits_.reserve(256);
+  hover_regions_.reserve(256);
   refresh_files();
   if (std::filesystem::exists(workspace_ / "README.md")) {
     open_document("README.md");
@@ -854,15 +856,26 @@ WorkbenchView::editor_offset_at(float x, float y, const Rect &editor_bounds,
   return nearest;
 }
 
-bool WorkbenchView::hovered(const Rect &bounds) const noexcept {
+bool WorkbenchView::hovered(const Rect &bounds) noexcept {
+  hover_regions_.push_back(bounds);
   return bounds.contains(pointer_x_, pointer_y_);
+}
+
+std::optional<std::size_t>
+WorkbenchView::hover_region_at(float x, float y) const noexcept {
+  for (std::size_t index = hover_regions_.size(); index > 0; --index) {
+    if (hover_regions_[index - 1].contains(x, y)) return index - 1;
+  }
+  return std::nullopt;
 }
 
 void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
   const float width = static_cast<float>(surface.width());
   const float height = static_cast<float>(surface.height());
   last_layout_ = layout(width, height);
+  editor_cursor_ = frame.editor_cursor;
   hits_.clear();
+  hover_regions_.clear();
   open_menu_bounds_ = {};
   if (frame.file_filter != last_filter_) {
     last_filter_ = frame.file_filter;
@@ -1012,16 +1025,17 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
       const Rect session_area{side_x + 8, 301, last_layout_.sidebar.width - 16,
                               std::max(40.0F, height - 443.0F)};
       session_max_scroll_ =
-          std::max(0.0F, static_cast<float>(frame.sessions.size()) * 36.0F -
+          std::max(0.0F,
+                   static_cast<float>(frame.session_items().size()) * 36.0F -
                              session_area.height);
       session_scroll_ = std::clamp(session_scroll_, 0.0F, session_max_scroll_);
       surface.push_clip(session_area);
       float session_y = session_area.y - session_scroll_;
-      if (frame.sessions.empty())
+      if (frame.session_items().empty())
         label(surface, "暂无会话",
               {session_area.x + 8, session_y + 8, session_area.width - 16, 20},
               11, muted, 450);
-      for (const auto &session : frame.sessions) {
+      for (const auto &session : frame.session_items()) {
         const Rect row{session_area.x, session_y, session_area.width, 32};
         const bool selected = session.id == frame.session_id;
         if (selected || hovered(row))
@@ -1142,18 +1156,18 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
   // Conversation timeline.
   const auto &timeline = last_layout_.timeline;
   float content_height = 30;
-  for (const auto &item : frame.items)
+  for (const auto &item : frame.conversation_items())
     content_height += item_height(item, timeline.width - 64) + 14;
   timeline_max_scroll_ = std::max(0.0F, content_height - timeline.height);
-  if (frame.items.size() != previous_item_count_) {
+  if (frame.conversation_items().size() != previous_item_count_) {
     if (follow_tail_ && frame.settings.auto_scroll)
       timeline_scroll_ = timeline_max_scroll_;
-    previous_item_count_ = frame.items.size();
+    previous_item_count_ = frame.conversation_items().size();
   }
   timeline_scroll_ = std::clamp(timeline_scroll_, 0.0F, timeline_max_scroll_);
   surface.push_clip(timeline);
   float item_y = timeline.y + 20 - timeline_scroll_;
-  if (frame.items.empty()) {
+  if (frame.conversation_items().empty()) {
     const float welcome_width = std::min(390.0F, timeline.width - 70);
     const Rect welcome{timeline.x + (timeline.width - welcome_width) / 2,
                        timeline.y + 72, welcome_width, 210};
@@ -1184,7 +1198,7 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
                      {},
                      "检查当前工作区并给出下一步建议"});
   } else {
-    for (const auto &item : frame.items) {
+    for (const auto &item : frame.conversation_items()) {
       const float card_height = item_height(item, timeline.width - 64);
       if (item_y + card_height > timeline.y &&
           item_y < timeline.y + timeline.height) {
@@ -1482,7 +1496,7 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
     std::size_t model_count = 0;
     std::size_t tool_count = 0;
     std::int64_t elapsed_ms = 0;
-    for (const auto &event : frame.trajectory_events) {
+    for (const auto &event : frame.events()) {
       if (event.type == "turn/start")
         ++turn_count;
       if (event.type == "model/request")
@@ -1510,11 +1524,11 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
     label(surface, "Tools", {toolbar.x + 14, toolbar.y + 87, 40, 9}, 7, muted,
           500);
     const auto event_total =
-        std::max<std::size_t>(1, frame.trajectory_events.size());
-    for (std::size_t index = 0; index < frame.trajectory_events.size();
+        std::max<std::size_t>(1, frame.events().size());
+    for (std::size_t index = 0; index < frame.events().size();
          ++index) {
       const auto visual =
-          trajectory_visual(frame.trajectory_events[index].type);
+          trajectory_visual(frame.events()[index].type);
       const auto segment = std::max(3.0F, track_width / event_total - 1.0F);
       const auto x = track_x + track_width * static_cast<float>(index) /
                                    static_cast<float>(event_total);
@@ -1523,7 +1537,7 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
     }
 
     std::vector<const snow::TrajectoryEvent *> visible_events;
-    for (const auto &event : frame.trajectory_events) {
+    for (const auto &event : frame.events()) {
       if (trajectory_matches(event, trajectory_filter_,
                              frame.trajectory_search))
         visible_events.push_back(&event);
@@ -1535,10 +1549,10 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
       full_height +=
           expanded_trajectory_events_.contains(event->seq) ? 164.0F : 40.0F;
     trajectory_max_scroll_ = std::max(0.0F, full_height - list.height);
-    if (frame.trajectory_events.size() != previous_trajectory_event_count_) {
+    if (frame.events().size() != previous_trajectory_event_count_) {
       if (frame.settings.auto_scroll)
         trajectory_scroll_ = trajectory_max_scroll_;
-      previous_trajectory_event_count_ = frame.trajectory_events.size();
+      previous_trajectory_event_count_ = frame.events().size();
     }
     trajectory_scroll_ =
         std::clamp(trajectory_scroll_, 0.0F, trajectory_max_scroll_);
@@ -1546,7 +1560,7 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
     float row_y = list.y + 8 - trajectory_scroll_;
     if (visible_events.empty()) {
       label(surface,
-            frame.trajectory_events.empty() ? "当前会话尚未产生轨迹事件"
+            frame.events().empty() ? "当前会话尚未产生轨迹事件"
                                             : "没有匹配筛选条件的事件",
             {list.x + 20, list.y + 45, list.width - 40, 24}, 12, muted, 450, 1,
             white::TextAlign::center);
@@ -1856,7 +1870,8 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
       menu_x = 152;
       entries = {{"聚焦输入框", WorkbenchActionKind::focus_message, {}, {}},
                  {"清空输入", WorkbenchActionKind::set_message_input, {}, {}}};
-      for (const auto &item : std::views::reverse(frame.items)) {
+      for (const auto &item :
+           std::views::reverse(frame.conversation_items())) {
         if (item.kind == ItemKind::user) {
           entries.push_back({"编辑上一条消息",
                              WorkbenchActionKind::set_message_input,
@@ -1865,7 +1880,8 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
           break;
         }
       }
-      for (const auto &item : std::views::reverse(frame.items)) {
+      for (const auto &item :
+           std::views::reverse(frame.conversation_items())) {
         if (item.kind == ItemKind::assistant) {
           entries.push_back({"复制上一条回复",
                              WorkbenchActionKind::copy_text,
@@ -2260,6 +2276,7 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
     button(cancel, "取消", WorkbenchActionKind::close_settings);
     button(save, "保存设置", WorkbenchActionKind::save_settings, true);
   }
+  active_hover_region_ = hover_region_at(pointer_x_, pointer_y_);
 }
 
 WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
@@ -2282,12 +2299,14 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
       resizing_sidebar_ = true;
       resizing_viewer_ = false;
       selecting_input_ = false;
+      pointer_cursor_active_ = true;
       return {WorkbenchActionKind::redraw, {}, 0, 0, false, true};
     }
     if (last_layout_.viewer_splitter.contains(event.x, event.y)) {
       resizing_viewer_ = true;
       resizing_sidebar_ = false;
       selecting_input_ = false;
+      pointer_cursor_active_ = true;
       return {WorkbenchActionKind::redraw, {}, 0, 0, false, true};
     }
     if (message_editor_bounds_.contains(event.x, event.y)) {
@@ -2327,28 +2346,41 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
     return {};
   }
   if (event.type == "pointermove") {
+    const auto next_hover_region = hover_region_at(event.x, event.y);
+    const bool hover_changed = next_hover_region != active_hover_region_;
     pointer_x_ = event.x;
     pointer_y_ = event.y;
+    active_hover_region_ = next_hover_region;
     if (resizing_sidebar_) {
       const auto content_reserve =
           last_layout_.menu_bar.width >= 1160 && !viewer_collapsed_ ? 820.0F
                                                                     : 560.0F;
       const auto max_sidebar =
           std::max(176.0F, last_layout_.menu_bar.width - content_reserve);
-      sidebar_width_ = std::clamp(event.x, 176.0F, max_sidebar);
+      const auto next_width = std::clamp(event.x, 176.0F, max_sidebar);
+      const bool changed = next_width != sidebar_width_ || sidebar_collapsed_ ||
+                           !sidebar_manually_sized_;
+      sidebar_width_ = next_width;
       sidebar_collapsed_ = false;
       sidebar_manually_sized_ = true;
-      return {WorkbenchActionKind::redraw, {}, 0, 0, false, true};
+      return {changed ? WorkbenchActionKind::redraw
+                      : WorkbenchActionKind::none,
+              {}, 0, 0, false, true};
     }
     if (resizing_viewer_) {
       const auto available =
           last_layout_.menu_bar.width - last_layout_.sidebar.width;
       const auto max_viewer = std::max(320.0F, available - 500.0F);
-      viewer_width_ =
-          std::clamp(last_layout_.menu_bar.width - event.x, 320.0F, max_viewer);
+      const auto next_width = std::clamp(
+          last_layout_.menu_bar.width - event.x, 320.0F, max_viewer);
+      const bool changed = next_width != viewer_width_ || viewer_collapsed_ ||
+                           !viewer_manually_sized_;
+      viewer_width_ = next_width;
       viewer_collapsed_ = false;
       viewer_manually_sized_ = true;
-      return {WorkbenchActionKind::redraw, {}, 0, 0, false, true};
+      return {changed ? WorkbenchActionKind::redraw
+                      : WorkbenchActionKind::none,
+              {}, 0, 0, false, true};
     }
     if (selecting_input_) {
       const auto &bounds =
@@ -2361,36 +2393,68 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
                              ? trajectory_search_text_
                          : selecting_editor_ == "filter" ? filter_editor_text_
                                                          : message_editor_text_;
+      const auto cursor = editor_offset_at(event.x, event.y, bounds, text);
+      if (cursor == editor_cursor_) return {};
+      editor_cursor_ = cursor;
       return {WorkbenchActionKind::set_editor_cursor,           {},   0,
-              editor_offset_at(event.x, event.y, bounds, text), true, false};
+              cursor, true, false};
     }
     const bool over_splitter =
         last_layout_.sidebar_splitter.contains(event.x, event.y) ||
         last_layout_.viewer_splitter.contains(event.x, event.y);
-    return {WorkbenchActionKind::redraw, {}, 0, 0, false, over_splitter};
+    WorkbenchAction result;
+    result.kind = hover_changed ? WorkbenchActionKind::redraw
+                                : WorkbenchActionKind::none;
+    if (over_splitter != pointer_cursor_active_) {
+      pointer_cursor_active_ = over_splitter;
+      result.pointer_cursor = over_splitter;
+    }
+    return result;
+  }
+  if (event.type == "pointerleave") {
+    const bool hover_changed = active_hover_region_.has_value();
+    pointer_x_ = -1;
+    pointer_y_ = -1;
+    active_hover_region_.reset();
+    WorkbenchAction result;
+    result.kind = hover_changed ? WorkbenchActionKind::redraw
+                                : WorkbenchActionKind::none;
+    if (pointer_cursor_active_) {
+      pointer_cursor_active_ = false;
+      result.pointer_cursor = false;
+    }
+    return result;
   }
   if (event.type == "wheel") {
     if (last_layout_.sidebar.contains(event.x, event.y) && event.y >= 301) {
-      session_scroll_ = std::clamp(session_scroll_ + event.delta_y, 0.0F,
+      const auto next = std::clamp(session_scroll_ + event.delta_y, 0.0F,
                                    session_max_scroll_);
+      if (next == session_scroll_) return {};
+      session_scroll_ = next;
       return {WorkbenchActionKind::redraw};
     }
     if (trajectory_open_ &&
         last_layout_.conversation.contains(event.x, event.y) &&
         event.y >= last_layout_.conversation.y + 79) {
-      trajectory_scroll_ = std::clamp(trajectory_scroll_ + event.delta_y, 0.0F,
-                                      trajectory_max_scroll_);
+      const auto next = std::clamp(trajectory_scroll_ + event.delta_y, 0.0F,
+                                   trajectory_max_scroll_);
+      if (next == trajectory_scroll_) return {};
+      trajectory_scroll_ = next;
       return {WorkbenchActionKind::redraw};
     }
     if (last_layout_.timeline.contains(event.x, event.y)) {
-      timeline_scroll_ = std::clamp(timeline_scroll_ + event.delta_y, 0.0F,
-                                    timeline_max_scroll_);
+      const auto next = std::clamp(timeline_scroll_ + event.delta_y, 0.0F,
+                                   timeline_max_scroll_);
+      if (next == timeline_scroll_) return {};
+      timeline_scroll_ = next;
       follow_tail_ = timeline_scroll_ >= timeline_max_scroll_ - 2;
       return {WorkbenchActionKind::redraw};
     }
     if (last_layout_.document.contains(event.x, event.y)) {
-      document_scroll_ = std::clamp(document_scroll_ + event.delta_y, 0.0F,
-                                    document_max_scroll_);
+      const auto next = std::clamp(document_scroll_ + event.delta_y, 0.0F,
+                                   document_max_scroll_);
+      if (next == document_scroll_) return {};
+      document_scroll_ = next;
       return {WorkbenchActionKind::redraw};
     }
     return {};
@@ -2403,11 +2467,13 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
     const bool over_splitter =
         last_layout_.sidebar_splitter.contains(event.x, event.y) ||
         last_layout_.viewer_splitter.contains(event.x, event.y);
-    return {WorkbenchActionKind::redraw, {}, 0, 0, false, over_splitter};
+    pointer_cursor_active_ = over_splitter;
+    return {WorkbenchActionKind::none, {}, 0, 0, false, over_splitter};
   }
   if (selecting_input_) {
     selecting_input_ = false;
-    return {WorkbenchActionKind::redraw};
+    selecting_editor_.clear();
+    return {};
   }
   const Rect menu_headers{102, 7, 196, 30};
   if (!active_menu_.empty() && !open_menu_bounds_.contains(event.x, event.y) &&

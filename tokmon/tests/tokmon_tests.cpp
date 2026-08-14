@@ -1,4 +1,5 @@
 #include <tokmon/approval.hpp>
+#include <tokmon/app.hpp>
 #include <tokmon/common/digest.hpp>
 #include <tokmon/common/files.hpp>
 #include <tokmon/product_assembly.hpp>
@@ -66,6 +67,7 @@ int main() {
     tokmon::write_text_file_atomic(
         settings_root / ".custom" / "tokmon.json",
         tokmon::Json{{"schema", "org.tokmon.desktop.config/v1"},
+                     {"ui", {{"scale", 1.4}}},
                      {"extension_value", 42}}
             .dump(2));
     auto settings =
@@ -98,6 +100,9 @@ int main() {
     const auto product = tokmon::Json::parse(
         tokmon::read_text_file(settings_root / ".custom" / "tokmon.json"));
     assert(product.at("extension_value") == 42);
+    const auto app_config =
+        tokmon::desktop::load_app_config(settings_root, ".custom");
+    assert(std::abs(app_config.ui_scale - 1.4F) < 0.001F);
     const auto providers = tokmon::Json::parse(
         tokmon::read_text_file(settings_root / ".custom" / "providers.json"));
     assert(providers.at("selected") == "acme_gateway");
@@ -222,7 +227,9 @@ int main() {
                                           const auto &hover_frame, float x,
                                           float y) {
       auto hover_action = workbench.dispatch({"pointermove", -10, -10});
-      assert(hover_action.kind == tokmon::desktop::WorkbenchActionKind::redraw);
+      assert(hover_action.kind == tokmon::desktop::WorkbenchActionKind::none ||
+             hover_action.kind ==
+                 tokmon::desktop::WorkbenchActionKind::redraw);
       workbench.draw(workbench_surface, hover_frame);
       const auto normal_hash = surface_hash();
       hover_action = workbench.dispatch({"pointermove", x, y});
@@ -232,6 +239,14 @@ int main() {
         std::cerr << "Missing hover pixels for " << control << " at " << x
                   << ',' << y << '\n';
       assert(surface_hash() != normal_hash);
+      hover_action = workbench.dispatch({"pointermove", x, y});
+      assert(hover_action.kind == tokmon::desktop::WorkbenchActionKind::none);
+      hover_action = workbench.dispatch({.type = "pointerleave"});
+      assert(hover_action.kind ==
+             tokmon::desktop::WorkbenchActionKind::redraw);
+      workbench.draw(workbench_surface, hover_frame);
+      hover_action = workbench.dispatch({.type = "pointerleave"});
+      assert(hover_action.kind == tokmon::desktop::WorkbenchActionKind::none);
     };
     const float user_bubble_right =
         desktop_layout.timeline.x + desktop_layout.timeline.width - 24;
@@ -280,7 +295,7 @@ int main() {
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::new_session);
     action = workbench.dispatch({"wheel", desktop_layout.timeline.x + 10,
                                  desktop_layout.timeline.y + 10, 0, 48});
-    assert(action.kind == tokmon::desktop::WorkbenchActionKind::redraw);
+    assert(action.kind == tokmon::desktop::WorkbenchActionKind::none);
     action = workbench.dispatch({"pointerdown", desktop_layout.composer.x + 30,
                                  desktop_layout.composer.y + 20});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::focus_message);
@@ -375,7 +390,7 @@ int main() {
     resized_layout = workbench.layout(1500, 900);
     assert(resized_layout.sidebar.width == 280);
     action = workbench.dispatch({"click", 280, 400});
-    assert(action.kind == tokmon::desktop::WorkbenchActionKind::redraw);
+    assert(action.kind == tokmon::desktop::WorkbenchActionKind::none);
 
     workbench.draw(workbench_surface, frame);
     resized_layout = workbench.layout(1500, 900);
@@ -388,7 +403,7 @@ int main() {
     resized_layout = workbench.layout(1500, 900);
     assert(std::abs(resized_layout.viewer.width - 500) < 0.1F);
     action = workbench.dispatch({"click", 1000, 400});
-    assert(action.kind == tokmon::desktop::WorkbenchActionKind::redraw);
+    assert(action.kind == tokmon::desktop::WorkbenchActionKind::none);
 
     // The custom borderless title bar exposes real native-window actions.
     workbench.draw(workbench_surface, frame);
@@ -419,14 +434,14 @@ int main() {
            tokmon::desktop::WorkbenchActionKind::focus_trajectory_search);
     action = workbench.dispatch({"click", feature_layout.conversation.x + 40,
                                  feature_layout.conversation.y + 98});
-    assert(action.kind == tokmon::desktop::WorkbenchActionKind::redraw);
+    assert(action.kind == tokmon::desktop::WorkbenchActionKind::none);
     action = workbench.dispatch({"click", feature_layout.conversation.x + 220,
                                  feature_layout.conversation.y + 194});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::redraw);
     workbench.draw(workbench_surface, frame);
     action = workbench.dispatch({"wheel", feature_layout.conversation.x + 220,
                                  feature_layout.conversation.y + 300, 0, 60});
-    assert(action.kind == tokmon::desktop::WorkbenchActionKind::redraw);
+    assert(action.kind == tokmon::desktop::WorkbenchActionKind::none);
     action = workbench.dispatch(
         {"click",
          feature_layout.conversation.x + feature_layout.conversation.width - 72,
@@ -463,7 +478,7 @@ int main() {
     assert(action.kind ==
            tokmon::desktop::WorkbenchActionKind::focus_settings_field);
     action = workbench.dispatch({"click", 650, 322});
-    assert(action.kind == tokmon::desktop::WorkbenchActionKind::redraw);
+    assert(action.kind == tokmon::desktop::WorkbenchActionKind::none);
     action = workbench.dispatch({"click", 390, 177});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::settings_tab);
     assert(action.value == "general");
