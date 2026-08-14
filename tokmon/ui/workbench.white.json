@@ -1,0 +1,99 @@
+{
+  "schema": "org.tokmon.white.view/v1",
+  "imports": ["White.Controls@1", "Tokmon.Workbench@1"],
+  "components": {
+    "WorkbenchMenuBar": {
+      "type": "Item",
+      "height": 44
+    },
+    "SidebarPane": {
+      "type": "Item",
+      "width": {"$bind": "props.width"}
+    },
+    "ConversationPane": {
+      "type": "Column",
+      "flexGrow": 1,
+      "minWidth": 320,
+      "children": [
+        {"type": "Item", "id": "conversation-header", "height": 78},
+        {"type": "Item", "id": "timeline", "flexGrow": 1},
+        {
+          "type": "Item",
+          "id": "composer-band",
+          "height": 136,
+          "paddingLeft": 28,
+          "paddingTop": 24,
+          "paddingRight": 28,
+          "paddingBottom": 24,
+          "children": [
+            {"type": "Item", "id": "composer", "flexGrow": 1}
+          ]
+        }
+      ]
+    },
+    "WorkspacePane": {
+      "type": "Column",
+      "width": {"$bind": "props.width"},
+      "children": [
+        {"type": "Item", "id": "viewer-header", "height": 92},
+        {
+          "type": "Row",
+          "id": "viewer-body",
+          "flexGrow": 1,
+          "children": [
+            {"type": "Item", "id": "document", "flexGrow": 1},
+            {"type": "Item", "id": "explorer",
+             "width": {"$bind": "props.explorerWidth"}}
+          ]
+        }
+      ]
+    }
+  },
+  "root": {
+    "type": "Application",
+    "id": "workbench",
+    "children": [
+      {
+        "type": "Column",
+        "id": "shell",
+        "flexGrow": 1,
+        "children": [
+          {"type": "WorkbenchMenuBar", "id": "menu-bar"},
+          {
+            "type": "Row",
+            "id": "body",
+            "flexGrow": 1,
+            "children": [
+              {
+                "type": "If",
+                "condition": {"$bind": "sidebar.visible"},
+                "children": [
+                  {"type": "SidebarPane", "id": "sidebar",
+                   "properties": {"width": {"$bind": "sidebar.width"}}}
+                ]
+              },
+              {
+                "type": "ConversationPane",
+                "id": "conversation"
+              },
+              {
+                "type": "If",
+                "condition": {"$bind": "viewer.visible"},
+                "children": [
+                  {
+                    "type": "WorkspacePane",
+                    "id": "viewer",
+                    "properties": {
+                      "width": {"$bind": "viewer.width"},
+                      "explorerWidth": {"$bind": "viewer.explorerWidth"}
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

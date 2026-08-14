@@ -47,3 +47,5 @@ Tokmon 输入框命令包括 `/cancel`、`/steer`、`/fork`、`/restart`、
   诊断和动态组合。
 
 完整设计与安全边界见 [docs/DESIGN.md](docs/DESIGN.md)。
+White 声明式 UI 文档、状态绑定与组件扩展见
+[white/README.md](white/README.md)。

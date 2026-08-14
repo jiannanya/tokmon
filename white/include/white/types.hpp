@@ -37,18 +37,40 @@ struct Rect {
 
 enum class FlexDirection { row, column };
 enum class Align { start, center, end, stretch };
+enum class Justify { start, center, end, space_between, space_around };
+enum class Position { relative, absolute };
 enum class Overflow { visible, hidden, scroll, automatic };
 enum class TextDirection { automatic, left_to_right, right_to_left };
 
 struct Style {
   std::optional<float> width;
   std::optional<float> height;
+  std::optional<float> min_width;
+  std::optional<float> min_height;
+  std::optional<float> max_width;
+  std::optional<float> max_height;
+  std::optional<float> left;
+  std::optional<float> top;
+  std::optional<float> right;
+  std::optional<float> bottom;
   float flex_grow{0};
+  float flex_shrink{0};
   FlexDirection flex_direction{FlexDirection::column};
   Align align_items{Align::stretch};
+  std::optional<Align> align_self;
+  Justify justify_content{Justify::start};
+  Position position{Position::relative};
   float gap{0};
   float padding{0};
+  std::optional<float> padding_left;
+  std::optional<float> padding_top;
+  std::optional<float> padding_right;
+  std::optional<float> padding_bottom;
   float margin{0};
+  std::optional<float> margin_left;
+  std::optional<float> margin_top;
+  std::optional<float> margin_right;
+  std::optional<float> margin_bottom;
   float border_width{0};
   float border_radius{0};
   float font_size{16};

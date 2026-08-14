@@ -35,6 +35,14 @@ public:
   }
 };
 
+class DefaultComponentService final : public ComponentService {
+public:
+  std::unique_ptr<DeclarativeView>
+  parse(std::string_view json_document) const override {
+    return DeclarativeView::parse(json_document);
+  }
+};
+
 template <typename Service>
 class ServicePlugin final : public arche::Plugin {
 public:
@@ -109,6 +117,17 @@ Assembly::Assembly(arche::Runtime& runtime) : runtime_(runtime) {
                                              "white-layout-v1")},
                      std::make_shared<SkiaRenderBackend>());
                });
+  catalog_.add("org.tokmon.white.components.default", "1.0.0",
+               [](const arche::Json&) {
+                 return std::make_shared<ServicePlugin<ComponentService>>(
+                     "org.tokmon.white.components.default", "white.components",
+                     "white-components-v1",
+                     std::vector{
+                         requirement("white.dom", "white-dom-v1"),
+                         requirement("white.style", "white-style-v1"),
+                         requirement("white.layout", "white-layout-v1")},
+                     std::make_shared<DefaultComponentService>());
+               });
   catalog_.add("org.tokmon.white.platform.sdl3", "1.0.0",
                [](const arche::Json&) {
                  return std::make_shared<ServicePlugin<RuntimeService>>(
@@ -125,6 +144,8 @@ Assembly::Assembly(arche::Runtime& runtime) : runtime_(runtime) {
       {"white.dom", "org.tokmon.white.dom.lexbor@1.0.0", "document"},
       {"white.style", "org.tokmon.white.style.default@1.0.0", "document"},
       {"white.layout", "org.tokmon.white.layout.yoga@1.0.0", "document"},
+      {"white.components", "org.tokmon.white.components.default@1.0.0",
+       "document"},
       {"white.render", "org.tokmon.white.render.skia-raster@1.0.0", "window"},
       {"white.runtime", "org.tokmon.white.platform.sdl3@1.0.0", "window"}};
   composition_report_ = reconciler_->apply(runtime_, desired, "white.");
@@ -133,6 +154,8 @@ Assembly::Assembly(arche::Runtime& runtime) : runtime_(runtime) {
       "white.style", "^1.0");
   layout_ = runtime_.root_context()->require<LayoutService>(
       "white.layout", "^1.0");
+  components_ = runtime_.root_context()->require<ComponentService>(
+      "white.components", "^1.0");
   renderer_ = runtime_.root_context()->require<RenderBackend>(
       "white.render", "^1.0");
   service_ = runtime_.root_context()->require<RuntimeService>(
@@ -142,11 +165,13 @@ Assembly::Assembly(arche::Runtime& runtime) : runtime_(runtime) {
 Assembly::~Assembly() {
   service_ = {};
   renderer_ = {};
+  components_ = {};
   layout_ = {};
   styles_ = {};
   dom_ = {};
   for (const auto* instance : {"white.runtime", "white.render",
-                               "white.layout", "white.style", "white.dom"}) {
+                               "white.components", "white.layout",
+                               "white.style", "white.dom"}) {
     try {
       runtime_.uninstall(instance);
     } catch (...) {

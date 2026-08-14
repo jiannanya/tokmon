@@ -5,6 +5,7 @@ find_package(unofficial-skia CONFIG REQUIRED)
 
 add_library(white
   src/assembly.cpp
+  src/declarative.cpp
   src/document.cpp
   src/renderer.cpp
   src/text_editor.cpp

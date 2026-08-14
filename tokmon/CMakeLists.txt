@@ -1,3 +1,11 @@
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+  ${CMAKE_CURRENT_SOURCE_DIR}/ui/workbench.white.json)
+file(READ ${CMAKE_CURRENT_SOURCE_DIR}/ui/workbench.white.json
+  TOKMON_WORKBENCH_UI_JSON)
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/generated)
+configure_file(src/workbench_document_data.hpp.in
+  ${CMAKE_CURRENT_BINARY_DIR}/generated/workbench_document_data.hpp @ONLY)
+
 add_library(tokmon_client
   src/app.cpp
   src/approval.cpp
@@ -5,12 +13,14 @@ add_library(tokmon_client
   src/settings.cpp
   src/product_assembly.cpp
   src/snow_client.cpp
-  src/workbench.cpp)
+  src/workbench.cpp
+  src/workbench_document.cpp)
 add_library(tokmon::client ALIAS tokmon_client)
 
 target_include_directories(tokmon_client PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>)
+  $<INSTALL_INTERFACE:include>
+  PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 set_target_properties(tokmon_client PROPERTIES EXPORT_NAME client)
 target_link_libraries(tokmon_client
   PUBLIC tokmon::white tokmon::snow tokmon::arche tokmon::common)

@@ -8,12 +8,15 @@
 #include <white/renderer.hpp>
 
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <set>
 #include <string>
 #include <vector>
 
 namespace tokmon::desktop {
+
+class WorkbenchDocument;
 
 struct WorkbenchSession {
   std::string id;
@@ -132,6 +135,7 @@ struct WorkbenchAction {
 class WorkbenchView final {
 public:
   explicit WorkbenchView(std::filesystem::path workspace);
+  ~WorkbenchView();
 
   [[nodiscard]] WorkbenchLayout layout(float width, float height) const;
   void draw(white::RasterSurface &surface, const WorkbenchFrame &frame);
@@ -169,6 +173,7 @@ private:
   [[nodiscard]] bool hovered(const white::Rect &bounds) const noexcept;
 
   std::filesystem::path workspace_;
+  std::unique_ptr<WorkbenchDocument> shell_;
   std::filesystem::path selected_document_;
   std::vector<FileEntry> files_;
   std::vector<std::filesystem::path> open_documents_;

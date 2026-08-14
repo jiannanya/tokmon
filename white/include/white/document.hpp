@@ -74,7 +74,9 @@ public:
   void set_hovered(bool value) noexcept { hovered_ = value; }
   void set_focused(bool value) noexcept { focused_ = value; }
   void set_scroll_metrics(float content_height) noexcept;
+  void set_scroll_offset(float offset) noexcept;
   void scroll_by(float delta) noexcept;
+  void reset_resolved_style() noexcept { style_ = authored_style_; }
   [[nodiscard]] std::string accessible_role() const;
   [[nodiscard]] std::string accessible_name() const;
 
@@ -84,6 +86,7 @@ private:
   std::vector<std::string> classes_;
   std::string text_;
   Style style_;
+  Style authored_style_;
   Rect layout_;
   Node* parent_{nullptr};
   std::map<std::string, std::string, std::less<>> attributes_;
@@ -122,6 +125,7 @@ public:
 
   [[nodiscard]] Node& root() noexcept { return *root_; }
   [[nodiscard]] const Node& root() const noexcept { return *root_; }
+  void set_root(std::unique_ptr<Node> root);
   void set_style_sheet(StyleSheet style_sheet);
   void layout(float width, float height);
   [[nodiscard]] Node* hit_test(float x, float y);

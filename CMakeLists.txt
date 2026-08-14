@@ -126,5 +126,9 @@ install(FILES docs/DESIGN.md README.md
   DESTINATION ${CMAKE_INSTALL_DATADIR}/tokmon/docs)
 install(FILES assets/tokmon-brand-2048.png
   DESTINATION ${CMAKE_INSTALL_DATADIR}/tokmon/assets)
+install(FILES tokmon/ui/workbench.white.json
+  DESTINATION ${CMAKE_INSTALL_DATADIR}/tokmon/ui)
+install(FILES white/README.md
+  DESTINATION ${CMAKE_INSTALL_DATADIR}/tokmon/docs/white)
 install(DIRECTORY examples/
   DESTINATION ${CMAKE_INSTALL_DATADIR}/tokmon/examples)

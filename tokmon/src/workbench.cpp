@@ -1,4 +1,5 @@
 #include <tokmon/workbench.hpp>
+#include <tokmon/workbench_document.hpp>
 
 #include <tokmon/common/files.hpp>
 
@@ -621,7 +622,8 @@ void draw_editor_text(RasterSurface &surface, std::string_view text,
 } // namespace
 
 WorkbenchView::WorkbenchView(std::filesystem::path workspace)
-    : workspace_(std::filesystem::weakly_canonical(std::move(workspace))) {
+    : workspace_(std::filesystem::weakly_canonical(std::move(workspace))),
+      shell_(std::make_unique<WorkbenchDocument>()) {
   refresh_files();
   if (std::filesystem::exists(workspace_ / "README.md")) {
     open_document("README.md");
@@ -632,9 +634,10 @@ WorkbenchView::WorkbenchView(std::filesystem::path workspace)
   }
 }
 
+WorkbenchView::~WorkbenchView() = default;
+
 WorkbenchLayout WorkbenchView::layout(float width, float height) const {
   WorkbenchLayout result;
-  result.menu_bar = {0, 0, width, 44};
   result.compact_sidebar = width < 980 && !sidebar_manually_sized_;
   const auto sidebar_content_reserve =
       width >= 1160 && !viewer_collapsed_ ? 820.0F : 560.0F;
@@ -644,14 +647,7 @@ WorkbenchLayout WorkbenchView::layout(float width, float height) const {
   const float sidebar_width =
       sidebar_collapsed_ ? 0.0F
                          : (result.compact_sidebar ? 72.0F : expanded_sidebar);
-  result.sidebar = {0, 44, sidebar_width, std::max(0.0F, height - 44)};
-  if (sidebar_width > 0)
-    result.sidebar_splitter = {sidebar_width - 3, 44, 6,
-                               std::max(0.0F, height - 44)};
-  const float body_x = sidebar_width;
-  const float body_y = 44;
-  const float body_height = std::max(200.0F, height - body_y);
-  const float available = std::max(320.0F, width - body_x);
+  const float available = std::max(320.0F, width - sidebar_width);
   result.viewer_visible = width >= 1160 && !viewer_collapsed_;
   float conversation_width = available;
   if (result.viewer_visible) {
@@ -663,27 +659,34 @@ WorkbenchLayout WorkbenchView::layout(float width, float height) const {
       conversation_width = std::clamp(available * 0.49F, 560.0F, 720.0F);
     }
   }
-  result.conversation = {body_x, body_y, conversation_width, body_height};
-  result.conversation_header = {body_x, body_y, conversation_width, 78};
-  result.composer = {body_x + 28, body_y + body_height - 112,
-                     conversation_width - 56, 88};
-  result.timeline = {body_x + 1, body_y + 79, conversation_width - 2,
-                     std::max(50.0F, result.composer.y - body_y - 92)};
-  if (result.viewer_visible) {
-    result.viewer = {body_x + conversation_width, body_y,
-                     available - conversation_width, body_height};
-    result.viewer_splitter = {result.viewer.x - 3, body_y, 6, body_height};
-    result.viewer_header = {result.viewer.x, result.viewer.y,
-                            result.viewer.width, 92};
-    const float explorer_width =
-        std::clamp(result.viewer.width * 0.29F, 196.0F, 248.0F);
-    result.document = {result.viewer.x + 1, result.viewer.y + 93,
-                       result.viewer.width - explorer_width - 2,
-                       result.viewer.height - 94};
-    result.explorer = {result.document.x + result.document.width,
-                       result.document.y, explorer_width,
-                       result.document.height};
-  }
+  const auto actual_viewer_width =
+      result.viewer_visible ? available - conversation_width : 0.0F;
+  const auto explorer_width = result.viewer_visible
+                                  ? std::clamp(actual_viewer_width * 0.29F,
+                                               196.0F, 248.0F)
+                                  : 0.0F;
+  const auto regions = shell_->layout(
+      width, height,
+      {sidebar_width, actual_viewer_width, explorer_width,
+       sidebar_width > 0, result.viewer_visible});
+  result.menu_bar = regions.menu_bar;
+  result.sidebar = regions.sidebar;
+  result.conversation = regions.conversation;
+  result.conversation_header = regions.conversation_header;
+  result.timeline = {regions.timeline.x + 1, regions.timeline.y + 1,
+                     std::max(0.0F, regions.timeline.width - 2),
+                     std::max(0.0F, regions.timeline.height - 1)};
+  result.composer = regions.composer;
+  result.viewer = regions.viewer;
+  result.viewer_header = regions.viewer_header;
+  result.document = regions.document;
+  result.explorer = regions.explorer;
+  if (result.sidebar.width > 0)
+    result.sidebar_splitter = {result.sidebar.x + result.sidebar.width - 3,
+                               result.sidebar.y, 6, result.sidebar.height};
+  if (result.viewer_visible)
+    result.viewer_splitter = {result.viewer.x - 3, result.viewer.y, 6,
+                              result.viewer.height};
   return result;
 }
 

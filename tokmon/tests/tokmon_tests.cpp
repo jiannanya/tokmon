@@ -142,7 +142,7 @@ int main() {
     assert(product.report().actions.size() == 2);
     assert(composed_runtime.fiber("white.runtime"));
     assert(composed_runtime.fiber("tokmon.projection"));
-    assert(composed_runtime.fibers().size() == 7);
+    assert(composed_runtime.fibers().size() == 8);
   }
 
   {

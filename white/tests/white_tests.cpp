@@ -1,4 +1,5 @@
 #include <white/document.hpp>
+#include <white/declarative.hpp>
 #include <white/renderer.hpp>
 #include <white/text_editor.hpp>
 #include <white/virtual_list.hpp>
@@ -10,7 +11,7 @@
 int main() {
   arche::Runtime white_runtime("white-test");
   white::Assembly white_assembly(white_runtime);
-  assert(white_assembly.composition_report().actions.size() == 5);
+  assert(white_assembly.composition_report().actions.size() == 6);
   auto composed_document = white_assembly.dom().parse(
       "<div id=\"composed\">capability graph</div>");
   white_assembly.styles().apply(
@@ -19,6 +20,89 @@ int main() {
   white::RasterSurface composed_surface(320, 200);
   white_assembly.renderer().render(composed_surface, composed_document);
   assert(composed_document.find_by_id("composed")->layout().width > 0);
+
+  auto declarative = white_assembly.components().parse(R"json(
+    {
+      "schema": "org.tokmon.white.view/v1",
+      "imports": ["White.Controls@1"],
+      "components": {
+        "SessionRow": {
+          "type": "Button",
+          "text": {"$bind": "props.title"},
+          "height": 36,
+          "on": {
+            "click": {
+              "command": "session.open",
+              "arguments": {"id": {"$bind": "props.id"}}
+            }
+          }
+        },
+        "Panel": {
+          "type": "Column",
+          "children": [{"type": "Slot"}]
+        }
+      },
+      "root": {
+        "type": "Application",
+        "id": "application",
+        "gap": 6,
+        "padding": 8,
+        "children": [
+          {"type": "Text", "id": "heading",
+           "text": {"$bind": "title"}, "height": 24},
+          {"type": "If", "condition": {"$bind": "online"},
+           "children": [
+             {"type": "Badge", "id": "online", "text": "online",
+              "height": 20}
+           ]},
+          {"type": "Repeater", "key": "sessions",
+           "model": {"$bind": "sessions"}, "as": "session",
+           "keyPath": "id", "children": [
+             {"type": "SessionRow", "id": "session-row",
+              "properties": {
+                "title": {"$bind": "session.title"},
+                "id": {"$bind": "session.id"}
+              }}
+           ]},
+          {"type": "Panel", "children": [
+            {"type": "Text", "id": "slotted", "text": "slot content",
+             "height": 20}
+          ]}
+        ]
+      }
+    }
+  )json");
+  std::string opened_session;
+  declarative->set_command_handler([&](const white::Command& command) {
+    assert(command.name == "session.open");
+    opened_session = command.arguments.at("id").get<std::string>();
+  });
+  declarative->set_state({{"title", "Declarative White"},
+                          {"online", true},
+                          {"sessions", {{{"id", "one"}, {"title", "First"}},
+                                        {{"id", "two"}, {"title", "Second"}}}}});
+  declarative->layout(420, 300);
+  white::RasterSurface declarative_surface(420, 300);
+  declarative_surface.clear({255, 255, 255, 255});
+  declarative->render(declarative_surface);
+  assert(declarative_surface.pixels());
+  assert(declarative->find_by_id("heading")->text() == "Declarative White");
+  assert(declarative->find_by_id("online"));
+  assert(declarative->find_by_id("slotted")->text() == "slot content");
+  auto* first_session = declarative->find_by_id("session-row");
+  assert(first_session && first_session->text() == "First");
+  const auto session_bounds = first_session->layout();
+  declarative->dispatch({"click", session_bounds.x + 2, session_bounds.y + 2});
+  assert(opened_session == "one");
+  declarative->set_state({{"title", "Updated"},
+                          {"online", false},
+                          {"sessions", {{{"id", "one"}, {"title", "First"}},
+                                        {{"id", "two"}, {"title", "Second"}}}}});
+  declarative->layout(420, 300);
+  assert(!declarative->find_by_id("online"));
+  assert(declarative->find_by_id("heading")->text() == "Updated");
+  assert(declarative->document().focused());
+  assert(declarative->document().focused()->text() == "First");
 
   auto document = white::Document::parse_html(
       R"(<div id="root"><div class="title">Tokmon &amp; Arche</div><input id="editor" aria-label="Message"/><div id="body">Hello 世界 مرحبا 🙂</div></div>)",
@@ -52,6 +136,9 @@ int main() {
   assert(document.find_by_id("root")->children()[0]->hovered());
   assert(document.find_by_id("root")->children()[0]->style().color ==
          (white::Color{255, 0, 0, 255}));
+  document.pointer_move(799, 599);
+  assert(document.find_by_id("root")->children()[0]->style().color ==
+         (white::Color{48, 80, 208, 255}));
 
   document.focus_next();
   assert(document.focused() == document.find_by_id("editor"));

@@ -50,8 +50,26 @@ void apply_property(Style& style, std::string_view name,
     style.width = number(value);
   } else if (name == "height") {
     style.height = number(value);
+  } else if (name == "min-width") {
+    style.min_width = number(value);
+  } else if (name == "min-height") {
+    style.min_height = number(value);
+  } else if (name == "max-width") {
+    style.max_width = number(value);
+  } else if (name == "max-height") {
+    style.max_height = number(value);
+  } else if (name == "left") {
+    style.left = number(value);
+  } else if (name == "top") {
+    style.top = number(value);
+  } else if (name == "right") {
+    style.right = number(value);
+  } else if (name == "bottom") {
+    style.bottom = number(value);
   } else if (name == "flex-grow") {
     style.flex_grow = number(value);
+  } else if (name == "flex-shrink") {
+    style.flex_shrink = number(value, 0);
   } else if (name == "flex-direction") {
     style.flex_direction =
         value == "row" ? FlexDirection::row : FlexDirection::column;
@@ -60,12 +78,45 @@ void apply_property(Style& style, std::string_view name,
     else if (value == "flex-end") style.align_items = Align::end;
     else if (value == "flex-start") style.align_items = Align::start;
     else style.align_items = Align::stretch;
+  } else if (name == "align-self") {
+    if (value == "center") style.align_self = Align::center;
+    else if (value == "flex-end") style.align_self = Align::end;
+    else if (value == "flex-start") style.align_self = Align::start;
+    else if (value == "stretch") style.align_self = Align::stretch;
+    else style.align_self.reset();
+  } else if (name == "justify-content") {
+    if (value == "center") style.justify_content = Justify::center;
+    else if (value == "flex-end") style.justify_content = Justify::end;
+    else if (value == "space-between")
+      style.justify_content = Justify::space_between;
+    else if (value == "space-around")
+      style.justify_content = Justify::space_around;
+    else style.justify_content = Justify::start;
+  } else if (name == "position") {
+    style.position =
+        value == "absolute" ? Position::absolute : Position::relative;
   } else if (name == "gap") {
     style.gap = number(value);
   } else if (name == "padding") {
     style.padding = number(value);
+  } else if (name == "padding-left") {
+    style.padding_left = number(value);
+  } else if (name == "padding-top") {
+    style.padding_top = number(value);
+  } else if (name == "padding-right") {
+    style.padding_right = number(value);
+  } else if (name == "padding-bottom") {
+    style.padding_bottom = number(value);
   } else if (name == "margin") {
     style.margin = number(value);
+  } else if (name == "margin-left") {
+    style.margin_left = number(value);
+  } else if (name == "margin-top") {
+    style.margin_top = number(value);
+  } else if (name == "margin-right") {
+    style.margin_right = number(value);
+  } else if (name == "margin-bottom") {
+    style.margin_bottom = number(value);
   } else if (name == "border-width") {
     style.border_width = number(value);
   } else if (name == "border-radius") {
@@ -174,6 +225,22 @@ YGAlign yoga_align(Align align) {
   return YGAlignStretch;
 }
 
+YGJustify yoga_justify(Justify justify) {
+  switch (justify) {
+  case Justify::start:
+    return YGJustifyFlexStart;
+  case Justify::center:
+    return YGJustifyCenter;
+  case Justify::end:
+    return YGJustifyFlexEnd;
+  case Justify::space_between:
+    return YGJustifySpaceBetween;
+  case Justify::space_around:
+    return YGJustifySpaceAround;
+  }
+  return YGJustifyFlexStart;
+}
+
 YGSize measure_text(YGNodeConstRef node, float width,
                     YGMeasureMode width_mode, float,
                     YGMeasureMode) {
@@ -206,13 +273,43 @@ YGNodeRef build_yoga(Node& node, std::vector<YGNodeRef>& nodes) {
   const auto& style = node.style();
   if (style.width) YGNodeStyleSetWidth(yoga, *style.width);
   if (style.height) YGNodeStyleSetHeight(yoga, *style.height);
+  if (style.min_width) YGNodeStyleSetMinWidth(yoga, *style.min_width);
+  if (style.min_height) YGNodeStyleSetMinHeight(yoga, *style.min_height);
+  if (style.max_width) YGNodeStyleSetMaxWidth(yoga, *style.max_width);
+  if (style.max_height) YGNodeStyleSetMaxHeight(yoga, *style.max_height);
+  YGNodeStyleSetPositionType(
+      yoga, style.position == Position::absolute ? YGPositionTypeAbsolute
+                                                 : YGPositionTypeRelative);
+  if (style.left) YGNodeStyleSetPosition(yoga, YGEdgeLeft, *style.left);
+  if (style.top) YGNodeStyleSetPosition(yoga, YGEdgeTop, *style.top);
+  if (style.right) YGNodeStyleSetPosition(yoga, YGEdgeRight, *style.right);
+  if (style.bottom) YGNodeStyleSetPosition(yoga, YGEdgeBottom, *style.bottom);
   YGNodeStyleSetFlexGrow(yoga, style.flex_grow);
+  YGNodeStyleSetFlexShrink(yoga, style.flex_shrink);
   YGNodeStyleSetFlexDirection(
       yoga, style.flex_direction == FlexDirection::row ? YGFlexDirectionRow
                                                        : YGFlexDirectionColumn);
   YGNodeStyleSetAlignItems(yoga, yoga_align(style.align_items));
+  if (style.align_self) YGNodeStyleSetAlignSelf(yoga, yoga_align(*style.align_self));
+  YGNodeStyleSetJustifyContent(yoga, yoga_justify(style.justify_content));
   YGNodeStyleSetPadding(yoga, YGEdgeAll, style.padding);
+  if (style.padding_left)
+    YGNodeStyleSetPadding(yoga, YGEdgeLeft, *style.padding_left);
+  if (style.padding_top)
+    YGNodeStyleSetPadding(yoga, YGEdgeTop, *style.padding_top);
+  if (style.padding_right)
+    YGNodeStyleSetPadding(yoga, YGEdgeRight, *style.padding_right);
+  if (style.padding_bottom)
+    YGNodeStyleSetPadding(yoga, YGEdgeBottom, *style.padding_bottom);
   YGNodeStyleSetMargin(yoga, YGEdgeAll, style.margin);
+  if (style.margin_left)
+    YGNodeStyleSetMargin(yoga, YGEdgeLeft, *style.margin_left);
+  if (style.margin_top)
+    YGNodeStyleSetMargin(yoga, YGEdgeTop, *style.margin_top);
+  if (style.margin_right)
+    YGNodeStyleSetMargin(yoga, YGEdgeRight, *style.margin_right);
+  if (style.margin_bottom)
+    YGNodeStyleSetMargin(yoga, YGEdgeBottom, *style.margin_bottom);
   YGNodeStyleSetGap(yoga, YGGutterAll, style.gap);
   if (style.overflow == Overflow::hidden)
     YGNodeStyleSetOverflow(yoga, YGOverflowHidden);
@@ -373,7 +470,9 @@ Node& Node::set_attribute(std::string name, std::string value) {
     std::string item;
     while (classes >> item) classes_.push_back(item);
   } else if (name == "style") {
-    parse_declarations(value, style_);
+    authored_style_ = Style{};
+    parse_declarations(value, authored_style_);
+    style_ = authored_style_;
   } else if (name == "tabindex") {
     try {
       tab_index_ = std::stoi(value);
@@ -429,6 +528,11 @@ void Node::scroll_by(float delta) noexcept {
   scroll_offset_y_ = std::clamp(
       scroll_offset_y_ + delta, 0.0F,
       std::max(0.0F, content_height_ - layout_.height));
+}
+
+void Node::set_scroll_offset(float offset) noexcept {
+  scroll_offset_y_ = std::clamp(
+      offset, 0.0F, std::max(0.0F, content_height_ - layout_.height));
 }
 
 std::string Node::accessible_role() const {
@@ -491,6 +595,7 @@ void StyleSheet::apply(Node& root) const {
   });
   std::function<void(Node&, const Node*)> apply_node =
       [&](Node& node, const Node* parent) {
+    node.reset_resolved_style();
     std::set<std::string, std::less<>> explicit_properties;
     for (const auto& rule : rules) {
       bool matched = false;
@@ -528,6 +633,14 @@ void StyleSheet::apply(Node& root) const {
 }
 
 Document::Document() : root_(std::make_unique<Node>("body")) {}
+
+void Document::set_root(std::unique_ptr<Node> root) {
+  if (!root) throw tokmon::Error("white.document.root", "root cannot be null");
+  focused_ = nullptr;
+  hovered_ = nullptr;
+  root_ = std::move(root);
+  if (style_sheet_) style_sheet_->apply(*root_);
+}
 
 Document Document::parse_html(std::string_view html, std::string_view css) {
   auto* parsed = lxb_html_document_create();

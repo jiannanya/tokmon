@@ -953,12 +953,60 @@ Arche 管理阶段 provider 和生命周期，White host 只保留不可破坏�
 White 提供：
 
 - 低层 DOM/style/layout/paint C++ API；
-- 高层 `Component`/`ViewContribution` contract；
-- keyed reconciliation 与批量 state update；
-- Button、Text、TextArea、ScrollView、VirtualList、SplitPane、Dialog 等默认 widget plugins；
+- 高层 `ViewBlueprint`、`ComponentRegistry` 和 `DeclarativeView` contract；
+- 严格 JSON 的 `org.tokmon.white.view/v1` 文档格式，支持组件、属性、子树、槽位、样式和 command event；
+- `$bind`、`$eq`、`$not`、`$and`、`$or`、`$concat` 表达式，以及 `If`、`Repeater` 结构组件；
+- keyed presentation-state reconciliation、immutable snapshot replacement 与批量 state transaction；
+- Button、TextField、TextArea、ScrollView、ListView、SplitPane、Dialog、Menu、Tabs、Overlay 等默认组件；
 - accessibility tree、role/name/state/action 与平台桥。
 
 White 不执行网页 JavaScript。产品状态由外部 projection/service 提供，White 只订阅 immutable snapshot 并发出 command。
+
+### 10.6 声明式文档与产品集成
+
+White 的声明式文档是 UI syntax tree，不是运行时配置或脚本。文档只解析一次；帧循环消费已经展开的组件树和 typed service lease，不在每帧重新解析 JSON。产品可以注册复合组件，复合组件通过 `props` 接收参数并通过 `Slot` 接收调用方子树。事件只发出 command，业务状态仍由产品 reducer/projection 持有。
+
+```json
+{
+  "schema": "org.tokmon.white.view/v1",
+  "imports": ["White.Controls@1"],
+  "components": {
+    "SessionRow": {
+      "type": "Button",
+      "text": {"$bind": "props.title"},
+      "on": {
+        "click": {
+          "command": "session.switch",
+          "arguments": {"id": {"$bind": "props.id"}}
+        }
+      }
+    }
+  },
+  "root": {
+    "type": "Application",
+    "children": [
+      {
+        "type": "Repeater",
+        "key": "sessions",
+        "model": {"$bind": "sessions"},
+        "as": "session",
+        "keyPath": "id",
+        "children": [
+          {
+            "type": "SessionRow",
+            "properties": {
+              "title": {"$bind": "session.title"},
+              "id": {"$bind": "session.id"}
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Tokmon 的 Workbench shell 本身使用这一文档模型声明菜单栏、可折叠侧栏、会话区、输入区、文件预览和资源树。Tokmon 只计算响应式产品策略并提交状态；White 展开结构、计算区域和维持组件运行时状态。轨迹、Markdown 和编辑器等高密度视图可继续作为专用 paint contribution 挂入声明式区域，不把产品概念反向放进 White。
 
 ---
 

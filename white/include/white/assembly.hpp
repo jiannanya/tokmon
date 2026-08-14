@@ -1,5 +1,6 @@
 #pragma once
 
+#include <white/declarative.hpp>
 #include <white/window.hpp>
 
 #include <arche/composition.hpp>
@@ -33,6 +34,13 @@ public:
                       const Document& document) const = 0;
 };
 
+class ComponentService {
+public:
+  virtual ~ComponentService() = default;
+  [[nodiscard]] virtual std::unique_ptr<DeclarativeView>
+  parse(std::string_view json_document) const = 0;
+};
+
 class RuntimeService final {
 public:
   [[nodiscard]] std::unique_ptr<Window> create_window(
@@ -50,6 +58,7 @@ public:
   [[nodiscard]] DomService& dom() { return *dom_; }
   [[nodiscard]] StyleService& styles() { return *styles_; }
   [[nodiscard]] LayoutService& layout() { return *layout_; }
+  [[nodiscard]] ComponentService& components() { return *components_; }
   [[nodiscard]] RenderBackend& renderer() { return *renderer_; }
   [[nodiscard]] const arche::CompositionReport& composition_report() const
       noexcept { return composition_report_; }
@@ -62,6 +71,7 @@ private:
   arche::CapabilityLease<DomService> dom_;
   arche::CapabilityLease<StyleService> styles_;
   arche::CapabilityLease<LayoutService> layout_;
+  arche::CapabilityLease<ComponentService> components_;
   arche::CapabilityLease<RenderBackend> renderer_;
   arche::CapabilityLease<RuntimeService> service_;
 };
