@@ -22,6 +22,7 @@ class Assembly;
 
 class ProtocolApprovalService final : public ApprovalService {
 public:
+  using ApprovalService::approve;
   using NotificationSink = std::function<void(tokmon::Json)>;
   explicit ProtocolApprovalService(
       std::chrono::milliseconds timeout = std::chrono::minutes(5))
@@ -29,7 +30,7 @@ public:
   bool approve(const ToolDefinition& tool,
                const tokmon::Json& canonical_arguments,
                std::string_view reason,
-               const Details& details = {}) override;
+               const Details& details) override;
   void set_notification_sink(NotificationSink sink);
   bool resolve(std::string_view approval_id, bool approved);
   void cancel_all();

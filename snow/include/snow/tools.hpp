@@ -113,11 +113,17 @@ public:
   virtual bool approve(const ToolDefinition& tool,
                        const tokmon::Json& canonical_arguments,
                        std::string_view reason,
-                       const Details& details = {}) = 0;
+                       const Details& details) = 0;
+  bool approve(const ToolDefinition& tool,
+               const tokmon::Json& canonical_arguments,
+               std::string_view reason) {
+    return approve(tool, canonical_arguments, reason, Details{});
+  }
 };
 
 class CallbackApproval final : public ApprovalService {
 public:
+  using ApprovalService::approve;
   using Callback = std::function<bool(const ToolDefinition&,
                                       const tokmon::Json&, std::string_view)>;
   explicit CallbackApproval(Callback callback)
@@ -125,7 +131,7 @@ public:
   bool approve(const ToolDefinition& tool,
                const tokmon::Json& canonical_arguments,
                std::string_view reason,
-               const Details& = {}) override {
+               const Details&) override {
     return callback_(tool, canonical_arguments, reason);
   }
 
