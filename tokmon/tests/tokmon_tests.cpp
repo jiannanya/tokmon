@@ -7,6 +7,7 @@
 #include <tokmon/settings.hpp>
 #include <tokmon/snow_client.hpp>
 #include <tokmon/workbench.hpp>
+#include <tokmon/workbench_document.hpp>
 #include <white/assembly.hpp>
 
 #include <cassert>
@@ -21,6 +22,10 @@
 #endif
 
 int main() {
+  assert(tokmon::desktop::WorkbenchDocument::html_source().contains(
+      "data-native=\"tokmon.conversation\""));
+  assert(tokmon::desktop::WorkbenchDocument::css_source().contains(
+      "#workbench-body"));
   tokmon::desktop::Projection projection;
   const tokmon::SessionId session("session");
   auto event = [&](std::uint64_t seq, std::string type, tokmon::Json data) {
@@ -142,12 +147,18 @@ int main() {
     auto composed_projection = std::make_shared<tokmon::desktop::Projection>();
     auto composed_approvals =
         std::make_shared<tokmon::desktop::ApprovalCoordinator>();
+    auto composed_workbench = std::make_shared<tokmon::desktop::WorkbenchView>(
+        std::filesystem::temp_directory_path(),
+        composed_white.native_components_shared());
     tokmon::desktop::ProductAssembly product(
-        composed_runtime, composed_projection, composed_approvals);
-    assert(product.report().actions.size() == 2);
+        composed_runtime, composed_projection, composed_approvals, {},
+        composed_workbench);
+    assert(product.report().actions.size() == 3);
     assert(composed_runtime.fiber("white.runtime"));
     assert(composed_runtime.fiber("tokmon.projection"));
-    assert(composed_runtime.fibers().size() == 8);
+    assert(composed_runtime.fiber("tokmon.workbench"));
+    assert(composed_white.native_components().contains("tokmon.sidebar"));
+    assert(composed_runtime.fibers().size() == 12);
   }
 
   {
@@ -234,7 +245,11 @@ int main() {
       const auto normal_hash = surface_hash();
       hover_action = workbench.dispatch({"pointermove", x, y});
       assert(hover_action.kind == tokmon::desktop::WorkbenchActionKind::redraw);
+      workbench_surface.begin_frame();
       workbench.draw(workbench_surface, hover_frame);
+      const auto hover_damage = workbench_surface.frame_damage();
+      assert(!hover_damage.empty());
+      assert(!hover_damage.full());
       if (surface_hash() == normal_hash)
         std::cerr << "Missing hover pixels for " << control << " at " << x
                   << ',' << y << '\n';

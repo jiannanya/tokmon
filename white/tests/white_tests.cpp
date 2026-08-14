@@ -4,14 +4,61 @@
 #include <white/text_editor.hpp>
 #include <white/virtual_list.hpp>
 #include <white/assembly.hpp>
+#include <white/html_view.hpp>
 
 #include <cassert>
 #include <iostream>
 
+namespace {
+
+class TestNativeComponent final : public white::NativeComponent {
+public:
+  explicit TestNativeComponent(int* clicks) : clicks_(clicks) {}
+
+  void paint(white::RasterSurface& surface, const white::Node& node,
+             const white::DamageRegion&) override {
+    surface.fill_rect(node.layout(), {20, 112, 226, 255}, 4);
+  }
+
+  bool dispatch(white::Node&, white::UiEvent& event) override {
+    if (event.type != "click") return false;
+    ++*clicks_;
+    return true;
+  }
+
+private:
+  int* clicks_;
+};
+
+} // namespace
+
 int main() {
   arche::Runtime white_runtime("white-test");
   white::Assembly white_assembly(white_runtime);
-  assert(white_assembly.composition_report().actions.size() == 6);
+  assert(white_assembly.composition_report().actions.size() == 9);
+  int native_clicks = 0;
+  white_assembly.native_components().register_factory(
+      "test.button", [&] {
+        return std::make_unique<TestNativeComponent>(&native_clicks);
+      });
+  auto html_view = white_assembly.views().create(
+      R"(<main id="app"><button id="native" data-native="test.button">Run</button></main>)",
+      R"(body { background:#ffffff; } #app { flex-grow:1; padding:8px; }
+          #native { width:120px; height:40px; background:#eeeeee; }
+          #native:hover { background:#dddddd; })");
+  html_view->layout(320, 200);
+  white::RasterSurface html_surface(320, 200);
+  html_view->render(html_surface);
+  assert(html_surface.frame_metrics().full_repaint);
+  const auto* native_node = html_view->find_by_id("native");
+  assert(native_node);
+  const auto native_bounds = native_node->layout();
+  assert(html_view->pointer_move(native_bounds.x + 2, native_bounds.y + 2));
+  html_view->render(html_surface);
+  assert(!html_surface.frame_metrics().full_repaint);
+  assert(html_view->dispatch(
+      {.type = "click", .x = native_bounds.x + 2, .y = native_bounds.y + 2}));
+  assert(native_clicks == 1);
   auto composed_document = white_assembly.dom().parse(
       "<div id=\"composed\">capability graph</div>");
   white_assembly.styles().apply(
@@ -214,6 +261,16 @@ int main() {
   surface.pop_clip();
   assert(surface.pixels() != nullptr);
   assert(surface.row_bytes() >= 800 * 4);
+
+  surface.begin_frame();
+  const white::Rect local_damage{12, 18, 80, 32};
+  document.invalidate(white::Invalidation::paint, local_damage);
+  surface.render(document);
+  const auto retained_damage = surface.frame_damage();
+  assert(!retained_damage.empty());
+  assert(!retained_damage.full());
+  assert(retained_damage.intersects(local_damage));
+  assert(!surface.frame_metrics().full_repaint);
 
   for (const int scale_percent : {100, 125, 150, 200}) {
     const int pixel_width = 320 * scale_percent / 100;

@@ -1,10 +1,12 @@
 #pragma once
 
 #include <white/types.hpp>
+#include <white/retained.hpp>
 
 #include <tokmon/common/types.hpp>
 
 #include <functional>
+#include <deque>
 #include <map>
 #include <memory>
 #include <optional>
@@ -139,14 +141,27 @@ public:
   [[nodiscard]] Node* focused() const noexcept { return focused_; }
   [[nodiscard]] tokmon::Json accessibility_tree() const;
   [[nodiscard]] Node* find_by_id(std::string_view id);
+  void invalidate(Invalidation flags, Rect damage = {});
+  [[nodiscard]] std::uint64_t revision() const noexcept { return revision_; }
+  [[nodiscard]] Invalidation dirty() const noexcept { return dirty_; }
+  [[nodiscard]] DamageRegion damage_since(std::uint64_t revision) const;
 
 private:
+  struct DamageRecord {
+    std::uint64_t revision{0};
+    DamageRegion damage;
+  };
+
   std::unique_ptr<Node> root_;
   std::optional<StyleSheet> style_sheet_;
   Node* focused_{nullptr};
   Node* hovered_{nullptr};
   float viewport_width_{0};
   float viewport_height_{0};
+  Invalidation dirty_{Invalidation::style | Invalidation::layout |
+                      Invalidation::paint | Invalidation::tree};
+  std::uint64_t revision_{0};
+  std::deque<DamageRecord> damage_history_;
 };
 
 } // namespace white

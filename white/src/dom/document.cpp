@@ -21,6 +21,12 @@
 namespace white {
 namespace {
 
+Invalidation without(Invalidation value, Invalidation flags) noexcept {
+  return static_cast<Invalidation>(
+      static_cast<std::uint8_t>(value) &
+      ~static_cast<std::uint8_t>(flags));
+}
+
 std::string trim(std::string value) {
   const auto first =
       std::find_if_not(value.begin(), value.end(),
@@ -632,7 +638,10 @@ void StyleSheet::apply(Node& root) const {
   apply_node(root, nullptr);
 }
 
-Document::Document() : root_(std::make_unique<Node>("body")) {}
+Document::Document() : root_(std::make_unique<Node>("body")) {
+  invalidate(Invalidation::style | Invalidation::layout |
+             Invalidation::paint | Invalidation::tree);
+}
 
 void Document::set_root(std::unique_ptr<Node> root) {
   if (!root) throw tokmon::Error("white.document.root", "root cannot be null");
@@ -640,6 +649,8 @@ void Document::set_root(std::unique_ptr<Node> root) {
   hovered_ = nullptr;
   root_ = std::move(root);
   if (style_sheet_) style_sheet_->apply(*root_);
+  invalidate(Invalidation::style | Invalidation::layout |
+             Invalidation::paint | Invalidation::tree);
 }
 
 Document Document::parse_html(std::string_view html, std::string_view css) {
@@ -664,12 +675,19 @@ Document Document::parse_html(std::string_view html, std::string_view css) {
 void Document::set_style_sheet(StyleSheet style_sheet) {
   style_sheet_ = std::move(style_sheet);
   style_sheet_->apply(*root_);
+  invalidate(Invalidation::style | Invalidation::layout |
+             Invalidation::paint);
 }
 
 void Document::layout(float width, float height) {
+  const bool viewport_changed = viewport_width_ != width || viewport_height_ != height;
+  const auto layout_flags = Invalidation::style | Invalidation::layout |
+                            Invalidation::tree;
+  if (!viewport_changed && !any(dirty_ & layout_flags)) return;
   viewport_width_ = width;
   viewport_height_ = height;
-  if (style_sheet_) style_sheet_->apply(*root_);
+  if (style_sheet_ && any(dirty_ & Invalidation::style))
+    style_sheet_->apply(*root_);
   root_->style().width = width;
   root_->style().height = height;
   std::vector<YGNodeRef> nodes;
@@ -677,6 +695,9 @@ void Document::layout(float width, float height) {
   YGNodeCalculateLayout(root, width, height, YGDirectionLTR);
   copy_layout(*root_, root, 0, 0);
   YGNodeFreeRecursive(root);
+  dirty_ = without(dirty_, layout_flags);
+  dirty_ |= Invalidation::paint;
+  if (viewport_changed) invalidate(Invalidation::paint);
 }
 
 Node* Document::hit_test(float x, float y) {
@@ -712,10 +733,14 @@ void Document::dispatch(UiEvent event) {
 void Document::pointer_move(float x, float y) {
   auto* next = hit_test(x, y);
   if (next == hovered_) return;
+  const auto previous_bounds = hovered_ ? hovered_->layout() : Rect{};
   if (hovered_) hovered_->set_hovered(false);
   hovered_ = next;
   if (hovered_) hovered_->set_hovered(true);
   if (style_sheet_) style_sheet_->apply(*root_);
+  if (!previous_bounds.empty()) invalidate(Invalidation::paint, previous_bounds);
+  if (hovered_)
+    invalidate(Invalidation::paint, hovered_->layout());
 }
 
 void Document::scroll(float x, float y, float delta_y) {
@@ -724,7 +749,10 @@ void Document::scroll(float x, float y, float delta_y) {
          target->style().overflow != Overflow::automatic)
     target = target->parent();
   if (!target) return;
+  const auto previous = target->scroll_offset_y();
   target->scroll_by(delta_y);
+  if (target->scroll_offset_y() == previous) return;
+  invalidate(Invalidation::layout | Invalidation::paint, target->layout());
   if (viewport_width_ > 0 && viewport_height_ > 0)
     layout(viewport_width_, viewport_height_);
 }
@@ -732,6 +760,7 @@ void Document::scroll(float x, float y, float delta_y) {
 void Document::focus(Node* node) {
   if (node && (!node->focusable() || node->disabled())) node = nullptr;
   if (node == focused_) return;
+  const auto previous_bounds = focused_ ? focused_->layout() : Rect{};
   if (focused_) {
     focused_->set_focused(false);
     UiEvent blur;
@@ -746,6 +775,8 @@ void Document::focus(Node* node) {
     focused_->invoke(focus_event, false);
   }
   if (style_sheet_) style_sheet_->apply(*root_);
+  if (!previous_bounds.empty()) invalidate(Invalidation::paint, previous_bounds);
+  if (focused_) invalidate(Invalidation::paint, focused_->layout());
 }
 
 void Document::focus_next(bool reverse) {
@@ -775,6 +806,7 @@ void Document::focus_next(bool reverse) {
 void Document::text_input(std::string_view utf8) {
   if (!focused_ || !focused_->editable() || focused_->disabled()) return;
   focused_->set_text(focused_->text() + std::string(utf8));
+  invalidate(Invalidation::layout | Invalidation::paint);
   UiEvent input;
   input.type = "input";
   input.text = std::string(utf8);
@@ -797,6 +829,7 @@ void Document::key_input(std::uint32_t key, bool shift) {
       --position;
     value.erase(position);
     focused_->set_text(std::move(value));
+    invalidate(Invalidation::layout | Invalidation::paint);
   }
   UiEvent event;
   event.type = "keydown";
@@ -812,6 +845,34 @@ tokmon::Json Document::accessibility_tree() const {
 
 Node* Document::find_by_id(std::string_view id) {
   return find_id(*root_, id);
+}
+
+void Document::invalidate(Invalidation flags, Rect damage) {
+  if (!any(flags)) return;
+  dirty_ |= flags;
+  DamageRecord record;
+  record.revision = ++revision_;
+  if (damage.empty())
+    record.damage.mark_full();
+  else
+    record.damage.add(damage);
+  damage_history_.push_back(std::move(record));
+  while (damage_history_.size() > 64) damage_history_.pop_front();
+}
+
+DamageRegion Document::damage_since(std::uint64_t revision) const {
+  DamageRegion result;
+  if (revision >= revision_) return result;
+  if (damage_history_.empty() ||
+      revision + 1 < damage_history_.front().revision) {
+    result.mark_full();
+    return result;
+  }
+  for (const auto &record : damage_history_) {
+    if (record.revision > revision) result.merge(record.damage);
+  }
+  if (result.empty()) result.mark_full();
+  return result;
 }
 
 } // namespace white

@@ -14,6 +14,10 @@
 #include <string>
 #include <vector>
 
+namespace white {
+class NativeComponentRegistry;
+}
+
 namespace tokmon::desktop {
 
 class WorkbenchDocument;
@@ -92,6 +96,8 @@ struct WorkbenchLayout {
   white::Rect viewer_splitter;
   bool compact_sidebar{false};
   bool viewer_visible{false};
+  friend bool operator==(const WorkbenchLayout&,
+                         const WorkbenchLayout&) = default;
 };
 
 enum class WorkbenchActionKind {
@@ -151,7 +157,9 @@ struct WorkbenchAction {
 // durable trajectory remains the canonical Agent state.
 class WorkbenchView final {
 public:
-  explicit WorkbenchView(std::filesystem::path workspace);
+  explicit WorkbenchView(
+      std::filesystem::path workspace,
+      std::shared_ptr<white::NativeComponentRegistry> native_components = {});
   ~WorkbenchView();
 
   [[nodiscard]] WorkbenchLayout layout(float width, float height) const;
@@ -190,6 +198,7 @@ private:
   [[nodiscard]] bool hovered(const white::Rect &bounds) noexcept;
   [[nodiscard]] std::optional<std::size_t>
   hover_region_at(float x, float y) const noexcept;
+  void request_redraw(white::Rect damage = {}) noexcept;
 
   std::filesystem::path workspace_;
   std::unique_ptr<WorkbenchDocument> shell_;
@@ -201,6 +210,7 @@ private:
   std::vector<HitTarget> hits_;
   std::vector<white::Rect> hover_regions_;
   std::optional<std::size_t> active_hover_region_;
+  std::optional<white::Rect> pending_damage_;
   WorkbenchLayout last_layout_;
   float timeline_scroll_{0};
   float timeline_max_scroll_{0};
@@ -248,6 +258,10 @@ private:
   bool selecting_filter_{false};
   std::string selecting_editor_;
   std::string last_filter_;
+  std::size_t last_frame_key_{0};
+  bool last_caret_visible_{true};
+  bool has_frame_{false};
+  bool full_redraw_pending_{true};
 };
 
 } // namespace tokmon::desktop

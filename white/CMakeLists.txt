@@ -4,12 +4,16 @@ find_package(yoga CONFIG REQUIRED)
 find_package(unofficial-skia CONFIG REQUIRED)
 
 add_library(white
-  src/assembly.cpp
-  src/declarative.cpp
-  src/document.cpp
-  src/renderer.cpp
-  src/text_editor.cpp
-  src/window.cpp)
+  src/composition/assembly.cpp
+  src/components/html_view.cpp
+  src/components/native_component.cpp
+  src/components/declarative.cpp
+  src/dom/document.cpp
+  src/input/text_editor.cpp
+  src/render/paint_tree.cpp
+  src/render/retained.cpp
+  src/render/skia_renderer.cpp
+  src/platform/sdl3_window.cpp)
 add_library(tokmon::white ALIAS white)
 
 target_include_directories(white PUBLIC

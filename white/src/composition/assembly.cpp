@@ -27,12 +27,34 @@ public:
   }
 };
 
+class RetainedSceneService final : public SceneService {
+public:
+  void sync(PaintTree& tree, const Document& document) const override {
+    (void)tree.sync(document);
+  }
+};
+
 class SkiaRenderBackend final : public RenderBackend {
 public:
   void render(RasterSurface& surface,
-              const Document& document) const override {
+              Document& document) const override {
     surface.render(document);
   }
+};
+
+class DefaultViewService final : public ViewService {
+public:
+  explicit DefaultViewService(
+      std::shared_ptr<NativeComponentRegistry> native_components)
+      : native_components_(std::move(native_components)) {}
+
+  std::unique_ptr<HtmlView>
+  create(std::string_view html, std::string_view css) const override {
+    return std::make_unique<HtmlView>(html, css, native_components_);
+  }
+
+private:
+  std::shared_ptr<NativeComponentRegistry> native_components_;
 };
 
 class DefaultComponentService final : public ComponentService {
@@ -82,6 +104,7 @@ arche::CapabilityRequirement requirement(std::string capability,
 } // namespace
 
 Assembly::Assembly(arche::Runtime& runtime) : runtime_(runtime) {
+  auto native_components = std::make_shared<NativeComponentRegistry>();
   catalog_.add("org.tokmon.white.dom.lexbor", "1.0.0",
                [](const arche::Json&) {
                  return std::make_shared<ServicePlugin<DomService>>(
@@ -108,13 +131,45 @@ Assembly::Assembly(arche::Runtime& runtime) : runtime_(runtime) {
                          requirement("white.style", "white-style-v1")},
                      std::make_shared<YogaLayoutService>());
                });
+  catalog_.add("org.tokmon.white.scene.retained", "1.0.0",
+               [](const arche::Json&) {
+                 return std::make_shared<ServicePlugin<SceneService>>(
+                     "org.tokmon.white.scene.retained", "white.scene",
+                     "white-scene-v1",
+                     std::vector{requirement("white.layout",
+                                             "white-layout-v1")},
+                     std::make_shared<RetainedSceneService>());
+               });
+  catalog_.add("org.tokmon.white.native-components", "1.0.0",
+               [native_components](const arche::Json&) {
+                 return std::make_shared<
+                     ServicePlugin<NativeComponentRegistry>>(
+                     "org.tokmon.white.native-components",
+                     "white.native-components", "white-native-components-v1",
+                     std::vector{requirement("white.scene", "white-scene-v1")},
+                     native_components);
+               });
+  catalog_.add("org.tokmon.white.views.html-css", "1.0.0",
+               [native_components](const arche::Json&) {
+                 return std::make_shared<ServicePlugin<ViewService>>(
+                     "org.tokmon.white.views.html-css", "white.views",
+                     "white-views-v1",
+                     std::vector{
+                         requirement("white.dom", "white-dom-v1"),
+                         requirement("white.style", "white-style-v1"),
+                         requirement("white.layout", "white-layout-v1"),
+                         requirement("white.scene", "white-scene-v1"),
+                         requirement("white.native-components",
+                                     "white-native-components-v1")},
+                     std::make_shared<DefaultViewService>(native_components));
+               });
   catalog_.add("org.tokmon.white.render.skia-raster", "1.0.0",
                [](const arche::Json&) {
                  return std::make_shared<ServicePlugin<RenderBackend>>(
                      "org.tokmon.white.render.skia-raster", "white.render",
                      "white-render-v1",
-                     std::vector{requirement("white.layout",
-                                             "white-layout-v1")},
+                     std::vector{requirement("white.scene",
+                                             "white-scene-v1")},
                      std::make_shared<SkiaRenderBackend>());
                });
   catalog_.add("org.tokmon.white.components.default", "1.0.0",
@@ -144,6 +199,10 @@ Assembly::Assembly(arche::Runtime& runtime) : runtime_(runtime) {
       {"white.dom", "org.tokmon.white.dom.lexbor@1.0.0", "document"},
       {"white.style", "org.tokmon.white.style.default@1.0.0", "document"},
       {"white.layout", "org.tokmon.white.layout.yoga@1.0.0", "document"},
+      {"white.scene", "org.tokmon.white.scene.retained@1.0.0", "document"},
+      {"white.native-components",
+       "org.tokmon.white.native-components@1.0.0", "document"},
+      {"white.views", "org.tokmon.white.views.html-css@1.0.0", "document"},
       {"white.components", "org.tokmon.white.components.default@1.0.0",
        "document"},
       {"white.render", "org.tokmon.white.render.skia-raster@1.0.0", "window"},
@@ -156,6 +215,11 @@ Assembly::Assembly(arche::Runtime& runtime) : runtime_(runtime) {
       "white.layout", "^1.0");
   components_ = runtime_.root_context()->require<ComponentService>(
       "white.components", "^1.0");
+  views_ = runtime_.root_context()->require<ViewService>("white.views", "^1.0");
+  scenes_ = runtime_.root_context()->require<SceneService>("white.scene", "^1.0");
+  native_components_ =
+      runtime_.root_context()->require<NativeComponentRegistry>(
+          "white.native-components", "^1.0");
   renderer_ = runtime_.root_context()->require<RenderBackend>(
       "white.render", "^1.0");
   service_ = runtime_.root_context()->require<RuntimeService>(
@@ -166,12 +230,16 @@ Assembly::~Assembly() {
   service_ = {};
   renderer_ = {};
   components_ = {};
+  views_ = {};
+  native_components_ = {};
+  scenes_ = {};
   layout_ = {};
   styles_ = {};
   dom_ = {};
   for (const auto* instance : {"white.runtime", "white.render",
-                               "white.components", "white.layout",
-                               "white.style", "white.dom"}) {
+                               "white.components", "white.views",
+                               "white.native-components", "white.scene",
+                               "white.layout", "white.style", "white.dom"}) {
     try {
       runtime_.uninstall(instance);
     } catch (...) {

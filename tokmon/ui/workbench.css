@@ -1,0 +1,102 @@
+/* White supports a deliberately small, deterministic CSS subset. Complex
+   controls are native components mounted at the data-native boundaries. */
+body {
+  background: #ffffff;
+  color: #202124;
+  font-size: 14px;
+  overflow: hidden;
+}
+
+#workbench {
+  flex-grow: 1;
+  overflow: hidden;
+}
+
+#menu-bar {
+  height: 44px;
+  min-height: 44px;
+  background: #ffffff;
+  border-color: #e2e3e5;
+  border-width: 1px;
+}
+
+#workbench-body {
+  flex-grow: 1;
+  flex-direction: row;
+  overflow: hidden;
+}
+
+#sidebar {
+  min-width: 0px;
+  background: #f5f5f4;
+  border-color: #e2e3e5;
+  border-width: 1px;
+  overflow: hidden;
+}
+
+#conversation {
+  flex-grow: 1;
+  min-width: 320px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+#conversation-header {
+  height: 78px;
+  min-height: 78px;
+  border-color: #e2e3e5;
+  border-width: 1px;
+}
+
+#timeline {
+  flex-grow: 1;
+  overflow: hidden;
+}
+
+#composer-band {
+  height: 136px;
+  min-height: 136px;
+  padding-left: 28px;
+  padding-top: 24px;
+  padding-right: 28px;
+  padding-bottom: 24px;
+}
+
+#composer {
+  flex-grow: 1;
+}
+
+#viewer {
+  min-width: 0px;
+  background: #ffffff;
+  border-color: #e2e3e5;
+  border-width: 1px;
+  overflow: hidden;
+}
+
+#viewer-header {
+  height: 92px;
+  min-height: 92px;
+  border-color: #e2e3e5;
+  border-width: 1px;
+}
+
+#viewer-body {
+  flex-grow: 1;
+  flex-direction: row;
+  overflow: hidden;
+}
+
+#document {
+  flex-grow: 1;
+  min-width: 0px;
+  overflow: hidden;
+}
+
+#explorer {
+  min-width: 0px;
+  background: #fafafa;
+  border-color: #e2e3e5;
+  border-width: 1px;
+  overflow: hidden;
+}

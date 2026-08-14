@@ -87,8 +87,29 @@ Window::Window(WindowOptions options) : options_(std::move(options)) {
   flags |= SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN;
   if (options_.resizable) flags |= SDL_WINDOW_RESIZABLE;
   if (options_.borderless) flags |= SDL_WINDOW_BORDERLESS;
-  window_ = SDL_CreateWindow(options_.title.c_str(), options_.width,
-                             options_.height, flags);
+  const auto create_window = [&](SDL_WindowFlags create_flags) {
+    return SDL_CreateWindow(options_.title.c_str(), options_.width,
+                            options_.height, create_flags);
+  };
+  if (options_.renderer != RendererPreference::cpu) {
+    (void)SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    (void)SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+    (void)SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,
+                              SDL_GL_CONTEXT_PROFILE_CORE);
+    (void)SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    (void)SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
+    window_ = create_window(flags | SDL_WINDOW_OPENGL);
+    if (window_) {
+      gl_context_ = SDL_GL_CreateContext(window_);
+      if (!gl_context_) {
+        SDL_DestroyWindow(window_);
+        window_ = nullptr;
+      }
+    }
+    if (!gl_context_ && options_.renderer == RendererPreference::gpu)
+      throw tokmon::Error("white.sdl.opengl", SDL_GetError());
+  }
+  if (!window_) window_ = create_window(flags);
   if (!window_) {
     throw tokmon::Error("white.sdl.window", SDL_GetError());
   }
@@ -106,13 +127,17 @@ Window::Window(WindowOptions options) : options_(std::move(options)) {
   (void)SDL_SetHint(SDL_HINT_MOUSE_DPI_SCALE_CURSORS, "1");
   default_cursor_ = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT);
   pointer_cursor_ = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_POINTER);
-  renderer_ = SDL_CreateRenderer(window_, nullptr);
-  if (!renderer_) {
-    throw tokmon::Error("white.sdl.renderer", SDL_GetError());
+  if (gl_context_) {
+    (void)SDL_GL_MakeCurrent(window_, gl_context_);
+    (void)SDL_GL_SetSwapInterval(1);
+  } else {
+    renderer_ = SDL_CreateRenderer(window_, nullptr);
+    if (!renderer_) {
+      throw tokmon::Error("white.sdl.renderer", SDL_GetError());
+    }
+    // Let presentation pace high-DPI full-surface uploads to the display.
+    (void)SDL_SetRenderVSync(renderer_, 1);
   }
-  // Let presentation pace high-DPI full-surface uploads to the display. Input
-  // events are still drained and coalesced before each frame.
-  (void)SDL_SetRenderVSync(renderer_, 1);
   sync_drawable_size();
   (void)SDL_ShowWindow(window_);
   SDL_StartTextInput(window_);
@@ -124,6 +149,8 @@ Window::~Window() {
   if (default_cursor_) SDL_DestroyCursor(default_cursor_);
   if (texture_) SDL_DestroyTexture(texture_);
   if (renderer_) SDL_DestroyRenderer(renderer_);
+  surface_.reset();
+  if (gl_context_) SDL_GL_DestroyContext(gl_context_);
   if (window_) SDL_DestroyWindow(window_);
   SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_EVENTS);
 }
@@ -341,8 +368,11 @@ void Window::sync_drawable_size() {
   if (surface_)
     surface_->resize(width, height, pixel_width, pixel_height);
   else
-    surface_ = std::make_unique<RasterSurface>(width, height, pixel_width,
-                                               pixel_height);
+    surface_ = std::make_unique<RasterSurface>(
+        width, height, pixel_width, pixel_height,
+        gl_context_ ? SurfaceBackend::gpu : SurfaceBackend::cpu);
+
+  if (gl_context_) return;
 
   if (texture_ && !pixel_size_changed) return;
   auto* texture = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_BGRA32,
@@ -473,6 +503,7 @@ void Window::render() {
     status = status_;
     builtin_chrome = builtin_chrome_;
   }
+  surface_->begin_frame();
   if (!options_.opaque_draw) surface_->clear({247, 248, 250, 255});
   if (draw) draw(*surface_);
 
@@ -493,8 +524,43 @@ void Window::render() {
     }
   }
 
-  SDL_UpdateTexture(texture_, nullptr, surface_->pixels(),
-                    static_cast<int>(surface_->row_bytes()));
+  if (gl_context_) {
+    surface_->flush();
+    (void)SDL_GL_SwapWindow(window_);
+    return;
+  }
+  const auto damage = surface_->frame_damage();
+  const auto* pixels = static_cast<const std::byte*>(surface_->pixels());
+  const auto pitch = static_cast<int>(surface_->row_bytes());
+  if (damage.empty() || damage.full()) {
+    SDL_UpdateTexture(texture_, nullptr, pixels, pitch);
+  } else {
+    const auto scale_x = static_cast<float>(surface_->pixel_width()) /
+                         static_cast<float>(surface_->width());
+    const auto scale_y = static_cast<float>(surface_->pixel_height()) /
+                         static_cast<float>(surface_->height());
+    for (const auto& logical : damage.rects()) {
+      const auto left = std::clamp(
+          static_cast<int>(std::floor(logical.x * scale_x)), 0,
+          surface_->pixel_width());
+      const auto top = std::clamp(
+          static_cast<int>(std::floor(logical.y * scale_y)), 0,
+          surface_->pixel_height());
+      const auto right = std::clamp(
+          static_cast<int>(std::ceil((logical.x + logical.width) * scale_x)),
+          left, surface_->pixel_width());
+      const auto bottom = std::clamp(
+          static_cast<int>(std::ceil((logical.y + logical.height) * scale_y)),
+          top, surface_->pixel_height());
+      if (right == left || bottom == top) continue;
+      const SDL_Rect physical{left, top, right - left, bottom - top};
+      const auto offset = static_cast<std::size_t>(top) *
+                              surface_->row_bytes() +
+                          static_cast<std::size_t>(left) *
+                              sizeof(std::uint32_t);
+      SDL_UpdateTexture(texture_, &physical, pixels + offset, pitch);
+    }
+  }
   SDL_SetRenderDrawColor(renderer_, 247, 248, 250, 255);
   SDL_RenderClear(renderer_);
   SDL_RenderTexture(renderer_, texture_, nullptr, nullptr);

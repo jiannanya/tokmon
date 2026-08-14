@@ -33,6 +33,10 @@ struct Rect {
     return point_x >= x && point_y >= y && point_x < x + width &&
            point_y < y + height;
   }
+  [[nodiscard]] bool empty() const noexcept {
+    return width <= 0 || height <= 0;
+  }
+  friend bool operator==(const Rect&, const Rect&) = default;
 };
 
 enum class FlexDirection { row, column };
@@ -82,6 +86,8 @@ struct Style {
   Color background{0, 0, 0, 0};
   Color border_color{0, 0, 0, 0};
   Overflow overflow{Overflow::visible};
+
+  friend bool operator==(const Style&, const Style&) = default;
 };
 
 } // namespace white

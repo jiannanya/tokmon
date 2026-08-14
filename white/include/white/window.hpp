@@ -17,8 +17,11 @@ struct SDL_Window;
 struct SDL_Renderer;
 struct SDL_Texture;
 struct SDL_Cursor;
+struct SDL_GLContextState;
 
 namespace white {
+
+enum class RendererPreference { automatic, gpu, cpu };
 
 struct WindowOptions {
   std::string title{"White"};
@@ -30,6 +33,9 @@ struct WindowOptions {
   float ui_scale{1.0F};
   // The draw callback covers every pixel, so the window can skip pre-clearing.
   bool opaque_draw{false};
+  // Automatic prefers Skia Ganesh/OpenGL and falls back to Skia raster plus
+  // SDL's accelerated presenter (including headless/test environments).
+  RendererPreference renderer{RendererPreference::automatic};
 };
 
 class Window final {
@@ -77,6 +83,9 @@ public:
                     const std::filesystem::path& initial_location = {});
   [[nodiscard]] float display_scale() const noexcept { return display_scale_; }
   [[nodiscard]] float ui_scale() const noexcept { return options_.ui_scale; }
+  [[nodiscard]] SurfaceBackend surface_backend() const noexcept {
+    return gl_context_ ? SurfaceBackend::gpu : SurfaceBackend::cpu;
+  }
   void invalidate();
   void close();
   void render_once();
@@ -94,6 +103,7 @@ private:
   SDL_Texture* texture_{nullptr};
   SDL_Cursor* default_cursor_{nullptr};
   SDL_Cursor* pointer_cursor_{nullptr};
+  SDL_GLContextState* gl_context_{nullptr};
   std::unique_ptr<RasterSurface> surface_;
   mutable std::mutex mutex_;
   DrawCallback draw_;

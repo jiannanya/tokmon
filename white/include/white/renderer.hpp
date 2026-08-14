@@ -12,6 +12,7 @@
 namespace white {
 
 enum class TextAlign { left, center, right };
+enum class SurfaceBackend { cpu, gpu };
 
 struct RichTextSpan {
   std::string text;
@@ -28,6 +29,11 @@ public:
   // keeps those coordinates stable while rasterizing into a denser buffer.
   RasterSurface(int width, int height);
   RasterSurface(int width, int height, int pixel_width, int pixel_height);
+  // The GPU overload binds a Skia Ganesh surface to the current OpenGL
+  // framebuffer. A current GL context must exist for the surface lifetime.
+  RasterSurface(int width, int height, int pixel_width, int pixel_height,
+                SurfaceBackend backend, int sample_count = 0,
+                int stencil_bits = 8);
   ~RasterSurface();
   RasterSurface(RasterSurface&&) noexcept;
   RasterSurface& operator=(RasterSurface&&) noexcept;
@@ -59,6 +65,18 @@ public:
   void push_clip(const Rect& rect);
   void pop_clip();
   void render(const Document& document);
+  void render(Document& document);
+  [[nodiscard]] std::uint64_t
+  document_revision(const Document& document) const noexcept;
+  [[nodiscard]] FrameMetrics frame_metrics() const noexcept;
+  // Window hosts call begin_frame before product drawing. If a retained
+  // document participates, frame_damage contains the exact presentation
+  // region; an empty region means the host must conservatively present all.
+  void begin_frame() noexcept;
+  [[nodiscard]] DamageRegion frame_damage() const;
+  // Submits pending Ganesh commands. It is a no-op for raster surfaces.
+  void flush();
+  [[nodiscard]] SurfaceBackend backend() const noexcept;
 
   [[nodiscard]] int width() const noexcept;
   [[nodiscard]] int height() const noexcept;

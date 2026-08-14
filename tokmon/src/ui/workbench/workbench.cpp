@@ -24,7 +24,6 @@ using white::Rect;
 // White's product skin intentionally uses a very small warm-neutral palette.
 // Hierarchy comes from spacing and typography; borders are reserved for actual
 // pane boundaries and interactive surfaces.
-constexpr Color canvas{245, 245, 243, 255};
 constexpr Color sidebar_background{241, 241, 239, 255};
 constexpr Color panel{253, 253, 252, 255};
 constexpr Color ink{29, 30, 33, 255};
@@ -619,11 +618,81 @@ void draw_editor_text(RasterSurface &surface, std::string_view text,
                  {38, 92, 190, 255}, 1.4F);
 }
 
+template <typename Value>
+void hash_frame_value(std::size_t &seed, const Value &value) {
+  const auto hash = std::hash<Value>{}(value);
+  seed ^= hash + 0x9e3779b9U + (seed << 6U) + (seed >> 2U);
+}
+
+std::size_t frame_content_key(const WorkbenchFrame &frame) {
+  std::size_t seed = 0;
+  const auto text = [&](std::string_view value) {
+    hash_frame_value(seed, value);
+  };
+  text(frame.session_id);
+  text(frame.status);
+  text(frame.message_input);
+  text(frame.file_filter);
+  text(frame.model);
+  text(frame.trajectory_search);
+  text(frame.active_settings_field);
+  hash_frame_value(seed, frame.trajectory_cursor);
+  hash_frame_value(seed, frame.composition_epoch);
+  hash_frame_value(seed, frame.editor_cursor);
+  hash_frame_value(seed, frame.selection_start);
+  hash_frame_value(seed, frame.selection_end);
+  hash_frame_value(seed, frame.snow_connected);
+  hash_frame_value(seed, frame.turn_active);
+  hash_frame_value(seed, frame.message_focused);
+  hash_frame_value(seed, frame.filter_focused);
+  hash_frame_value(seed, frame.trajectory_search_focused);
+  hash_frame_value(seed, frame.settings_field_focused);
+  hash_frame_value(seed, frame.window_maximized);
+  hash_frame_value(seed, frame.conversation_items().size());
+  hash_frame_value(seed, frame.events().size());
+  hash_frame_value(seed, frame.session_items().size());
+  if (frame.approval) {
+    text(frame.approval->id);
+    text(frame.approval->tool.name);
+    text(frame.approval->reason);
+  }
+  for (const auto &attachment : frame.attachments) {
+    text(attachment.name);
+    hash_frame_value(seed, attachment.bytes);
+  }
+  const auto &settings = frame.settings;
+  text(settings.language);
+  text(settings.theme);
+  text(settings.provider_id);
+  text(settings.provider_name);
+  text(settings.provider_kind);
+  text(settings.endpoint);
+  text(settings.api_key_env);
+  text(settings.model);
+  text(settings.request_timeout_ms);
+  text(settings.agent_preset);
+  text(settings.max_steps);
+  text(settings.default_permission);
+  hash_frame_value(seed, settings.raw_trace);
+  hash_frame_value(seed, settings.restart_enabled);
+  hash_frame_value(seed, settings.auto_scroll);
+  for (const auto &plugin : settings.plugins) {
+    text(plugin.instance);
+    text(plugin.package);
+    text(plugin.realm);
+    hash_frame_value(seed, plugin.disabled);
+    hash_frame_value(seed, plugin.required);
+  }
+  return seed;
+}
+
 } // namespace
 
-WorkbenchView::WorkbenchView(std::filesystem::path workspace)
+WorkbenchView::WorkbenchView(
+    std::filesystem::path workspace,
+    std::shared_ptr<white::NativeComponentRegistry> native_components)
     : workspace_(std::filesystem::weakly_canonical(std::move(workspace))),
-      shell_(std::make_unique<WorkbenchDocument>()) {
+      shell_(std::make_unique<WorkbenchDocument>(std::move(native_components))) {
   hits_.reserve(256);
   hover_regions_.reserve(256);
   refresh_files();
@@ -869,10 +938,52 @@ WorkbenchView::hover_region_at(float x, float y) const noexcept {
   return std::nullopt;
 }
 
+void WorkbenchView::request_redraw(Rect damage) noexcept {
+  if (full_redraw_pending_) return;
+  if (damage.empty()) {
+    full_redraw_pending_ = true;
+    pending_damage_.reset();
+    return;
+  }
+  // Include antialiasing/stroke fringes in the invalidated area.
+  damage = {damage.x - 3, damage.y - 3, damage.width + 6,
+            damage.height + 6};
+  if (!pending_damage_) {
+    pending_damage_ = damage;
+    return;
+  }
+  const auto left = std::min(pending_damage_->x, damage.x);
+  const auto top = std::min(pending_damage_->y, damage.y);
+  const auto right = std::max(pending_damage_->x + pending_damage_->width,
+                              damage.x + damage.width);
+  const auto bottom = std::max(pending_damage_->y + pending_damage_->height,
+                               damage.y + damage.height);
+  pending_damage_ = Rect{left, top, right - left, bottom - top};
+}
+
 void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
   const float width = static_cast<float>(surface.width());
   const float height = static_cast<float>(surface.height());
-  last_layout_ = layout(width, height);
+  const auto next_layout = layout(width, height);
+  if (!has_frame_ || next_layout != last_layout_) {
+    full_redraw_pending_ = true;
+    pending_damage_.reset();
+  }
+  last_layout_ = next_layout;
+  const auto next_frame_key = frame_content_key(frame);
+  if (!full_redraw_pending_ && !pending_damage_) {
+    const bool caret_only = has_frame_ && next_frame_key == last_frame_key_ &&
+                            frame.caret_visible != last_caret_visible_;
+    if (caret_only) {
+      const auto editor = settings_open_       ? settings_editor_bounds_
+                          : trajectory_open_   ? trajectory_search_bounds_
+                          : frame.filter_focused ? filter_editor_bounds_
+                                                 : message_editor_bounds_;
+      request_redraw(editor);
+    } else {
+      request_redraw();
+    }
+  }
   editor_cursor_ = frame.editor_cursor;
   hits_.clear();
   hover_regions_.clear();
@@ -881,7 +992,13 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
     last_filter_ = frame.file_filter;
     refresh_files(last_filter_);
   }
-  surface.clear(canvas);
+  // The retained HTML/CSS shell paints the structural surfaces. The code
+  // below consists only of Tokmon native components mounted at data-native
+  // boundaries (timeline, editor, file tree and overlays).
+  const bool partial_redraw = !full_redraw_pending_ && pending_damage_.has_value();
+  shell_->invalidate(partial_redraw ? *pending_damage_ : Rect{});
+  shell_->render(surface);
+  if (partial_redraw) surface.push_clip(*pending_damage_);
 
   const auto add_hit = [&](Rect bounds, WorkbenchActionKind action,
                            std::filesystem::path file = {}) {
@@ -2277,12 +2394,19 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
     button(save, "保存设置", WorkbenchActionKind::save_settings, true);
   }
   active_hover_region_ = hover_region_at(pointer_x_, pointer_y_);
+  if (partial_redraw) surface.pop_clip();
+  pending_damage_.reset();
+  full_redraw_pending_ = false;
+  last_frame_key_ = next_frame_key;
+  last_caret_visible_ = frame.caret_visible;
+  has_frame_ = true;
 }
 
 WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
   if (event.type == "pointerdown") {
     if (settings_open_) {
       if (settings_editor_bounds_.contains(event.x, event.y)) {
+        request_redraw(settings_editor_bounds_);
         selecting_input_ = true;
         selecting_editor_ = "settings";
         return {WorkbenchActionKind::focus_settings_field,
@@ -2296,6 +2420,7 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
       return {};
     }
     if (last_layout_.sidebar_splitter.contains(event.x, event.y)) {
+      request_redraw();
       resizing_sidebar_ = true;
       resizing_viewer_ = false;
       selecting_input_ = false;
@@ -2303,6 +2428,7 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
       return {WorkbenchActionKind::redraw, {}, 0, 0, false, true};
     }
     if (last_layout_.viewer_splitter.contains(event.x, event.y)) {
+      request_redraw();
       resizing_viewer_ = true;
       resizing_sidebar_ = false;
       selecting_input_ = false;
@@ -2310,6 +2436,7 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
       return {WorkbenchActionKind::redraw, {}, 0, 0, false, true};
     }
     if (message_editor_bounds_.contains(event.x, event.y)) {
+      request_redraw(message_editor_bounds_);
       selecting_input_ = true;
       selecting_filter_ = false;
       selecting_editor_ = "message";
@@ -2321,6 +2448,7 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
               false};
     }
     if (filter_editor_bounds_.contains(event.x, event.y)) {
+      request_redraw(filter_editor_bounds_);
       selecting_input_ = true;
       selecting_filter_ = true;
       selecting_editor_ = "filter";
@@ -2332,6 +2460,7 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
               false};
     }
     if (trajectory_search_bounds_.contains(event.x, event.y)) {
+      request_redraw(trajectory_search_bounds_);
       selecting_input_ = true;
       selecting_editor_ = "trajectory";
       return {WorkbenchActionKind::focus_trajectory_search,
@@ -2346,8 +2475,15 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
     return {};
   }
   if (event.type == "pointermove") {
+    const auto previous_hover_region = active_hover_region_;
     const auto next_hover_region = hover_region_at(event.x, event.y);
     const bool hover_changed = next_hover_region != active_hover_region_;
+    if (hover_changed) {
+      if (previous_hover_region && *previous_hover_region < hover_regions_.size())
+        request_redraw(hover_regions_[*previous_hover_region]);
+      if (next_hover_region && *next_hover_region < hover_regions_.size())
+        request_redraw(hover_regions_[*next_hover_region]);
+    }
     pointer_x_ = event.x;
     pointer_y_ = event.y;
     active_hover_region_ = next_hover_region;
@@ -2363,6 +2499,7 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
       sidebar_width_ = next_width;
       sidebar_collapsed_ = false;
       sidebar_manually_sized_ = true;
+      if (changed) request_redraw();
       return {changed ? WorkbenchActionKind::redraw
                       : WorkbenchActionKind::none,
               {}, 0, 0, false, true};
@@ -2378,6 +2515,7 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
       viewer_width_ = next_width;
       viewer_collapsed_ = false;
       viewer_manually_sized_ = true;
+      if (changed) request_redraw();
       return {changed ? WorkbenchActionKind::redraw
                       : WorkbenchActionKind::none,
               {}, 0, 0, false, true};
@@ -2396,6 +2534,7 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
       const auto cursor = editor_offset_at(event.x, event.y, bounds, text);
       if (cursor == editor_cursor_) return {};
       editor_cursor_ = cursor;
+      request_redraw(bounds);
       return {WorkbenchActionKind::set_editor_cursor,           {},   0,
               cursor, true, false};
     }
@@ -2413,6 +2552,8 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
   }
   if (event.type == "pointerleave") {
     const bool hover_changed = active_hover_region_.has_value();
+    if (active_hover_region_ && *active_hover_region_ < hover_regions_.size())
+      request_redraw(hover_regions_[*active_hover_region_]);
     pointer_x_ = -1;
     pointer_y_ = -1;
     active_hover_region_.reset();
@@ -2431,6 +2572,7 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
                                    session_max_scroll_);
       if (next == session_scroll_) return {};
       session_scroll_ = next;
+      request_redraw(last_layout_.sidebar);
       return {WorkbenchActionKind::redraw};
     }
     if (trajectory_open_ &&
@@ -2440,6 +2582,7 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
                                    trajectory_max_scroll_);
       if (next == trajectory_scroll_) return {};
       trajectory_scroll_ = next;
+      request_redraw(last_layout_.conversation);
       return {WorkbenchActionKind::redraw};
     }
     if (last_layout_.timeline.contains(event.x, event.y)) {
@@ -2448,6 +2591,7 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
       if (next == timeline_scroll_) return {};
       timeline_scroll_ = next;
       follow_tail_ = timeline_scroll_ >= timeline_max_scroll_ - 2;
+      request_redraw(last_layout_.timeline);
       return {WorkbenchActionKind::redraw};
     }
     if (last_layout_.document.contains(event.x, event.y)) {
@@ -2455,12 +2599,16 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
                                    document_max_scroll_);
       if (next == document_scroll_) return {};
       document_scroll_ = next;
+      request_redraw(last_layout_.document);
       return {WorkbenchActionKind::redraw};
     }
     return {};
   }
   if (event.type != "click")
     return {};
+  // Clicks can open overlays or change product state through many commands;
+  // conservatively repaint once. Pointer motion and scrolling stay regional.
+  request_redraw();
   if (resizing_sidebar_ || resizing_viewer_) {
     resizing_sidebar_ = false;
     resizing_viewer_ = false;

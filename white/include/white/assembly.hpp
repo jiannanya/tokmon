@@ -1,6 +1,8 @@
 #pragma once
 
 #include <white/declarative.hpp>
+#include <white/html_view.hpp>
+#include <white/paint_tree.hpp>
 #include <white/window.hpp>
 
 #include <arche/composition.hpp>
@@ -31,7 +33,20 @@ class RenderBackend {
 public:
   virtual ~RenderBackend() = default;
   virtual void render(RasterSurface& surface,
-                      const Document& document) const = 0;
+                      Document& document) const = 0;
+};
+
+class SceneService {
+public:
+  virtual ~SceneService() = default;
+  virtual void sync(PaintTree& tree, const Document& document) const = 0;
+};
+
+class ViewService {
+public:
+  virtual ~ViewService() = default;
+  [[nodiscard]] virtual std::unique_ptr<HtmlView>
+  create(std::string_view html, std::string_view css = {}) const = 0;
 };
 
 class ComponentService {
@@ -59,6 +74,15 @@ public:
   [[nodiscard]] StyleService& styles() { return *styles_; }
   [[nodiscard]] LayoutService& layout() { return *layout_; }
   [[nodiscard]] ComponentService& components() { return *components_; }
+  [[nodiscard]] ViewService& views() { return *views_; }
+  [[nodiscard]] SceneService& scenes() { return *scenes_; }
+  [[nodiscard]] NativeComponentRegistry& native_components() {
+    return *native_components_;
+  }
+  [[nodiscard]] std::shared_ptr<NativeComponentRegistry>
+  native_components_shared() const noexcept {
+    return native_components_.shared();
+  }
   [[nodiscard]] RenderBackend& renderer() { return *renderer_; }
   [[nodiscard]] const arche::CompositionReport& composition_report() const
       noexcept { return composition_report_; }
@@ -72,6 +96,9 @@ private:
   arche::CapabilityLease<StyleService> styles_;
   arche::CapabilityLease<LayoutService> layout_;
   arche::CapabilityLease<ComponentService> components_;
+  arche::CapabilityLease<ViewService> views_;
+  arche::CapabilityLease<SceneService> scenes_;
+  arche::CapabilityLease<NativeComponentRegistry> native_components_;
   arche::CapabilityLease<RenderBackend> renderer_;
   arche::CapabilityLease<RuntimeService> service_;
 };

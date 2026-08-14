@@ -1,0 +1,12 @@
+#pragma once
+
+#include <string_view>
+
+namespace tokmon::desktop::detail {
+
+inline constexpr std::string_view workbench_html =
+    R"tokmon_html(@TOKMON_WORKBENCH_HTML@)tokmon_html";
+inline constexpr std::string_view workbench_css =
+    R"tokmon_css(@TOKMON_WORKBENCH_CSS@)tokmon_css";
+
+} // namespace tokmon::desktop::detail

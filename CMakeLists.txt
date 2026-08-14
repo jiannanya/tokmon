@@ -122,11 +122,11 @@ install(DIRECTORY sdk/typescript sdk/python
   DESTINATION ${CMAKE_INSTALL_DATADIR}/tokmon/sdk
   PATTERN "__pycache__" EXCLUDE
   PATTERN "*.pyc" EXCLUDE)
-install(FILES docs/DESIGN.md README.md
+install(FILES docs/DESIGN.md docs/WHITE_UI_ARCHITECTURE.md README.md
   DESTINATION ${CMAKE_INSTALL_DATADIR}/tokmon/docs)
 install(FILES assets/tokmon-brand-2048.png
   DESTINATION ${CMAKE_INSTALL_DATADIR}/tokmon/assets)
-install(FILES tokmon/ui/workbench.white.json
+install(FILES tokmon/ui/workbench.html tokmon/ui/workbench.css
   DESTINATION ${CMAKE_INSTALL_DATADIR}/tokmon/ui)
 install(FILES white/README.md
   DESTINATION ${CMAKE_INSTALL_DATADIR}/tokmon/docs/white)

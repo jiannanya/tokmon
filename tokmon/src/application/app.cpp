@@ -138,8 +138,10 @@ AppConfig load_app_config(const std::filesystem::path &workspace,
 }
 
 App::App(AppConfig config)
-    : config_(std::move(config)), workbench_(config_.workspace),
-      white_(ui_runtime_), approvals_(std::make_shared<ApprovalCoordinator>()),
+    : config_(std::move(config)), white_(ui_runtime_),
+      workbench_(std::make_shared<WorkbenchView>(
+          config_.workspace, white_.native_components_shared())),
+      approvals_(std::make_shared<ApprovalCoordinator>()),
       projection_(std::make_shared<Projection>()) {
   settings_ = load_desktop_settings(config_.workspace, config_.config_dir_name);
   if (config_.model.empty())
@@ -249,7 +251,8 @@ App::App(AppConfig config)
   }
   refresh_sessions();
   product_ = std::make_unique<ProductAssembly>(ui_runtime_, projection_,
-                                               approvals_, snow_process_);
+                                               approvals_, snow_process_,
+                                               workbench_);
 }
 
 App::~App() {
@@ -904,7 +907,7 @@ void App::export_trajectory() {
     const auto path = config_.workspace / config_.config_dir_name / "exports" /
                       ("session-" + session_.str() + "-" + stamp + ".json");
     tokmon::write_text_file_atomic(path, document.dump(2) + "\n");
-    (void)workbench_.show_document(path);
+    (void)workbench_->show_document(path);
     update_status("Session log exported to " + path.string());
   } catch (const std::exception &error) {
     update_status("Session log export failed: " + std::string(error.what()));
@@ -1046,7 +1049,7 @@ void App::choose_document() {
       [this](std::vector<std::filesystem::path> files) {
         if (files.empty())
           return;
-        if (!workbench_.show_document(files.front())) {
+        if (!workbench_->show_document(files.front())) {
           update_status("Document preview accepts text/source files inside the "
                         "workspace");
           return;
@@ -1059,7 +1062,7 @@ void App::choose_document() {
 }
 
 bool App::handle_workbench_event(const white::UiEvent &event) {
-  const auto action = workbench_.dispatch(event);
+  const auto action = workbench_->dispatch(event);
   if (action.pointer_cursor)
     window_->set_pointer_cursor(*action.pointer_cursor);
   switch (action.kind) {
@@ -1182,7 +1185,7 @@ bool App::handle_workbench_event(const white::UiEvent &event) {
       config_.request_timeout = std::chrono::milliseconds(
           setting_number(saved.request_timeout_ms, 300000, 1000, 3600000));
       config_.max_steps = setting_number(saved.max_steps, 32, 1, 1024);
-      workbench_.close_settings();
+      workbench_->close_settings();
       update_status("设置已保存；提供方与插件变更将在 Snow 下次启动时生效");
     } catch (const std::exception &error) {
       update_status("保存设置失败: " + std::string(error.what()));
@@ -1202,7 +1205,7 @@ bool App::handle_workbench_event(const white::UiEvent &event) {
         }
         save_desktop_settings(config_.workspace, current);
       }
-      if (workbench_.show_document(path))
+      if (workbench_->show_document(path))
         update_status("已打开 " + path.string());
       else
         update_status("无法在工作区预览配置文件");
@@ -1328,7 +1331,7 @@ void App::draw(white::RasterSurface &surface) {
   frame.selection_start = editor.selection_start;
   frame.selection_end = editor.selection_end;
   frame.caret_visible = editor.caret_visible;
-  workbench_.draw(surface, frame);
+  workbench_->draw(surface, frame);
 }
 
 std::shared_ptr<snow::ModelProvider> App::create_model() const {

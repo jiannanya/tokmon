@@ -1,13 +1,23 @@
 #include <white/renderer.hpp>
+#include <white/paint_tree.hpp>
 
 #include <include/core/SkCanvas.h>
+#include <include/core/SkColorSpace.h>
 #include <include/core/SkFont.h>
 #include <include/core/SkImageInfo.h>
+#include <include/core/SkImage.h>
 #include <include/core/SkPaint.h>
 #include <include/core/SkRRect.h>
 #include <include/core/SkSurface.h>
 #include <include/core/SkFontMgr.h>
 #include <include/core/SkFontStyle.h>
+#include <include/gpu/ganesh/GrBackendSurface.h>
+#include <include/gpu/ganesh/GrDirectContext.h>
+#include <include/gpu/ganesh/GrTypes.h>
+#include <include/gpu/GpuTypes.h>
+#include <include/gpu/ganesh/SkSurfaceGanesh.h>
+#include <include/gpu/ganesh/gl/GrGLBackendSurface.h>
+#include <include/gpu/ganesh/gl/GrGLDirectContext.h>
 #include <modules/skparagraph/include/FontCollection.h>
 #include <modules/skparagraph/include/ParagraphBuilder.h>
 #include <modules/skparagraph/include/ParagraphStyle.h>
@@ -71,10 +81,11 @@ void append_cache_key(std::string& key, Color value) {
   append_cache_key(key, value.alpha);
 }
 
-void draw_shaped_text(SkCanvas& canvas, const Node& node, SkColor text_color) {
+void draw_shaped_text(SkCanvas& canvas, const PaintNode& node,
+                      SkColor text_color) {
   using namespace skia::textlayout;
-  const auto& rect = node.layout();
-  const auto& style = node.style();
+  const auto& rect = node.bounds;
+  const auto& style = node.style;
   ParagraphStyle paragraph_style;
   paragraph_style.setTextDirection(
       style.text_direction == white::TextDirection::right_to_left
@@ -95,15 +106,15 @@ void draw_shaped_text(SkCanvas& canvas, const Node& node, SkColor text_color) {
   auto builder = ParagraphBuilder::make(
       paragraph_style, font_collection(), SkUnicodes::ICU::Make());
   builder->pushStyle(text_style);
-  builder->addText(node.text().data(), node.text().size());
+  builder->addText(node.text.data(), node.text.size());
   auto paragraph = builder->Build();
   paragraph->layout(std::max(1.0F, rect.width - style.padding * 2.0F));
   paragraph->paint(&canvas, rect.x + style.padding, rect.y + style.padding);
 }
 
-void render_node(SkCanvas& canvas, const Node& node) {
-  const auto& rect = node.layout();
-  const auto& style = node.style();
+void render_node(SkCanvas& canvas, const PaintNode& node) {
+  const auto& rect = node.bounds;
+  const auto& style = node.style;
   SkPaint paint;
   paint.setAntiAlias(true);
   const auto alpha = static_cast<std::uint8_t>(
@@ -133,7 +144,7 @@ void render_node(SkCanvas& canvas, const Node& node) {
         SkRect::MakeXYWH(rect.x, rect.y, rect.width, rect.height),
         style.border_radius, style.border_radius, paint);
   }
-  if (node.focused()) {
+  if (node.focused) {
     paint.setColor(SkColorSetARGB(220, 58, 107, 224));
     paint.setStyle(SkPaint::kStroke_Style);
     paint.setStrokeWidth(2.0F);
@@ -148,20 +159,20 @@ void render_node(SkCanvas& canvas, const Node& node) {
   if (style.overflow != Overflow::visible) {
     canvas.clipRect(SkRect::MakeXYWH(rect.x, rect.y, rect.width, rect.height));
   }
-  if (!node.text().empty()) {
+  if (!node.text.empty()) {
     draw_shaped_text(canvas, node, color(with_opacity(style.color)));
   }
-  for (const auto& child : node.children()) {
-    render_node(canvas, *child);
+  for (const auto& child : node.children) {
+    render_node(canvas, child);
   }
   if ((style.overflow == Overflow::scroll ||
        style.overflow == Overflow::automatic) &&
-      node.content_height() > rect.height) {
-    const auto ratio = rect.height / node.content_height();
+      node.content_height > rect.height) {
+    const auto ratio = rect.height / node.content_height;
     const auto thumb_height = std::max(20.0F, rect.height * ratio);
     const auto available = std::max(0.0F, rect.height - thumb_height - 4.0F);
-    const auto progress = node.scroll_offset_y() /
-                          std::max(1.0F, node.content_height() - rect.height);
+    const auto progress = node.scroll_offset_y /
+                          std::max(1.0F, node.content_height - rect.height);
     SkPaint scrollbar;
     scrollbar.setAntiAlias(true);
     scrollbar.setColor(SkColorSetARGB(110, 95, 100, 112));
@@ -177,6 +188,10 @@ void render_node(SkCanvas& canvas, const Node& node) {
 } // namespace
 
 struct RasterSurface::Impl {
+  struct DocumentRenderState {
+    PaintTree tree;
+    std::uint64_t rendered_revision{0};
+  };
   struct ParagraphEntry {
     std::unique_ptr<skia::textlayout::Paragraph> paragraph;
     std::uint64_t last_used{};
@@ -214,9 +229,18 @@ struct RasterSurface::Impl {
   int height{};
   int pixel_width{};
   int pixel_height{};
+  SurfaceBackend backend{SurfaceBackend::cpu};
+  int sample_count{};
+  int stencil_bits{8};
+  sk_sp<GrDirectContext> gpu_context;
   sk_sp<SkSurface> surface;
+  sk_sp<SkSurface> presentation_surface;
+  mutable std::vector<std::byte> readback;
   std::unordered_map<std::string, ParagraphEntry> paragraph_cache;
+  std::unordered_map<const Document*, DocumentRenderState> documents;
   std::uint64_t paragraph_clock{};
+  FrameMetrics metrics;
+  DamageRegion frame_damage;
 
   Impl() { paragraph_cache.reserve(512); }
 };
@@ -226,7 +250,21 @@ RasterSurface::RasterSurface(int width, int height)
 
 RasterSurface::RasterSurface(int width, int height, int pixel_width,
                              int pixel_height)
+    : RasterSurface(width, height, pixel_width, pixel_height,
+                    SurfaceBackend::cpu) {}
+
+RasterSurface::RasterSurface(int width, int height, int pixel_width,
+                             int pixel_height, SurfaceBackend backend,
+                             int sample_count, int stencil_bits)
     : impl_(std::make_unique<Impl>()) {
+  impl_->backend = backend;
+  impl_->sample_count = std::max(0, sample_count);
+  impl_->stencil_bits = std::max(0, stencil_bits);
+  if (backend == SurfaceBackend::gpu) {
+    impl_->gpu_context = GrDirectContexts::MakeGL();
+    if (!impl_->gpu_context)
+      throw std::runtime_error("failed to create Skia Ganesh GL context");
+  }
   resize(width, height, pixel_width, pixel_height);
 }
 RasterSurface::~RasterSurface() = default;
@@ -243,16 +281,39 @@ void RasterSurface::resize(int width, int height, int pixel_width,
   impl_->height = std::max(1, height);
   impl_->pixel_width = std::max(1, pixel_width);
   impl_->pixel_height = std::max(1, pixel_height);
-  impl_->surface = SkSurfaces::Raster(
-      SkImageInfo::MakeN32Premul(impl_->pixel_width, impl_->pixel_height));
-  if (!impl_->surface) {
-    throw std::runtime_error("failed to create Skia raster surface");
+  if (impl_->backend == SurfaceBackend::gpu) {
+    const auto image_info = SkImageInfo::Make(
+        impl_->pixel_width, impl_->pixel_height, kRGBA_8888_SkColorType,
+        kPremul_SkAlphaType);
+    impl_->surface = SkSurfaces::RenderTarget(
+        impl_->gpu_context.get(), skgpu::Budgeted::kYes, image_info,
+        impl_->sample_count, kTopLeft_GrSurfaceOrigin, nullptr);
+    // GL_RGBA8. Keeping the framebuffer format at the API boundary avoids a
+    // dependency on Skia's private GrGLDefines header.
+    const GrGLFramebufferInfo framebuffer{0, 0x8058};
+    const auto target = GrBackendRenderTargets::MakeGL(
+        impl_->pixel_width, impl_->pixel_height, impl_->sample_count,
+        impl_->stencil_bits, framebuffer);
+    impl_->presentation_surface = SkSurfaces::WrapBackendRenderTarget(
+        impl_->gpu_context.get(), target, kBottomLeft_GrSurfaceOrigin,
+        kRGBA_8888_SkColorType, nullptr, nullptr);
+  } else {
+    impl_->surface = SkSurfaces::Raster(
+        SkImageInfo::MakeN32Premul(impl_->pixel_width, impl_->pixel_height));
+  }
+  if (!impl_->surface || (impl_->backend == SurfaceBackend::gpu &&
+                          !impl_->presentation_surface)) {
+    throw std::runtime_error(impl_->backend == SurfaceBackend::gpu
+                                 ? "failed to wrap the OpenGL framebuffer"
+                                 : "failed to create Skia raster surface");
   }
   impl_->surface->getCanvas()->scale(
       static_cast<float>(impl_->pixel_width) /
           static_cast<float>(impl_->width),
       static_cast<float>(impl_->pixel_height) /
           static_cast<float>(impl_->height));
+  impl_->documents.clear();
+  impl_->readback.clear();
 }
 
 void RasterSurface::clear(Color value) {
@@ -476,7 +537,70 @@ void RasterSurface::push_clip(const Rect& rect) {
 void RasterSurface::pop_clip() { impl_->surface->getCanvas()->restore(); }
 
 void RasterSurface::render(const Document& document) {
-  render_node(*impl_->surface->getCanvas(), document.root());
+  PaintTree tree;
+  (void)tree.sync(document);
+  render_node(*impl_->surface->getCanvas(), tree.root());
+  impl_->metrics = {.document_revision = document.revision(),
+                    .damage_rects = 1,
+                    .paint_nodes = tree.node_count(),
+                    .full_repaint = true};
+  impl_->frame_damage.mark_full();
+}
+
+void RasterSurface::render(Document& document) {
+  document.layout(static_cast<float>(width()), static_cast<float>(height()));
+  auto& state = impl_->documents[&document];
+  const auto damage = document.damage_since(state.rendered_revision);
+  if (damage.empty() && state.rendered_revision == document.revision()) return;
+  (void)state.tree.sync(document);
+  auto* canvas = impl_->surface->getCanvas();
+  if (damage.full() || state.rendered_revision == 0) {
+    render_node(*canvas, state.tree.root());
+  } else {
+    for (const auto& rect : damage.rects()) {
+      canvas->save();
+      canvas->clipRect(
+          SkRect::MakeXYWH(rect.x, rect.y, rect.width, rect.height),
+          SkClipOp::kIntersect, true);
+      render_node(*canvas, state.tree.root());
+      canvas->restore();
+    }
+  }
+  state.rendered_revision = document.revision();
+  impl_->metrics = {.document_revision = state.rendered_revision,
+                    .damage_rects = damage.full() ? 1 : damage.rects().size(),
+                    .paint_nodes = state.tree.node_count(),
+                    .full_repaint = damage.full()};
+  impl_->frame_damage.merge(damage);
+}
+
+std::uint64_t
+RasterSurface::document_revision(const Document& document) const noexcept {
+  const auto found = impl_->documents.find(&document);
+  return found == impl_->documents.end() ? 0 : found->second.rendered_revision;
+}
+
+FrameMetrics RasterSurface::frame_metrics() const noexcept {
+  return impl_->metrics;
+}
+
+void RasterSurface::begin_frame() noexcept { impl_->frame_damage.clear(); }
+
+DamageRegion RasterSurface::frame_damage() const {
+  return impl_->frame_damage;
+}
+
+void RasterSurface::flush() {
+  if (!impl_->gpu_context) return;
+  const auto image = impl_->surface->makeImageSnapshot();
+  auto* canvas = impl_->presentation_surface->getCanvas();
+  canvas->clear(SK_ColorTRANSPARENT);
+  canvas->drawImage(image, 0, 0);
+  impl_->gpu_context->flushAndSubmit(impl_->presentation_surface.get());
+}
+
+SurfaceBackend RasterSurface::backend() const noexcept {
+  return impl_->backend;
 }
 
 int RasterSurface::width() const noexcept { return impl_->width; }
@@ -486,11 +610,27 @@ int RasterSurface::pixel_height() const noexcept {
   return impl_->pixel_height;
 }
 const void* RasterSurface::pixels() const noexcept {
+  if (impl_->backend == SurfaceBackend::gpu) {
+    const auto row_bytes =
+        static_cast<std::size_t>(impl_->pixel_width) * sizeof(std::uint32_t);
+    impl_->readback.resize(row_bytes *
+                           static_cast<std::size_t>(impl_->pixel_height));
+    const auto info = SkImageInfo::Make(
+        impl_->pixel_width, impl_->pixel_height, kBGRA_8888_SkColorType,
+        kPremul_SkAlphaType);
+    if (!impl_->surface->readPixels(info, impl_->readback.data(), row_bytes,
+                                    0, 0))
+      return nullptr;
+    return impl_->readback.data();
+  }
   SkPixmap pixmap;
   if (!impl_->surface->peekPixels(&pixmap)) return nullptr;
   return pixmap.addr();
 }
 std::size_t RasterSurface::row_bytes() const noexcept {
+  if (impl_->backend == SurfaceBackend::gpu)
+    return static_cast<std::size_t>(impl_->pixel_width) *
+           sizeof(std::uint32_t);
   SkPixmap pixmap;
   if (!impl_->surface->peekPixels(&pixmap)) return 0;
   return pixmap.rowBytes();

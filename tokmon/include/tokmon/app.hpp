@@ -78,9 +78,9 @@ private:
   [[nodiscard]] std::shared_ptr<snow::ModelProvider> create_model() const;
 
   AppConfig config_;
-  WorkbenchView workbench_;
   arche::Runtime ui_runtime_{"tokmon"};
   white::Assembly white_;
+  std::shared_ptr<WorkbenchView> workbench_;
   std::shared_ptr<ApprovalCoordinator> approvals_;
   std::shared_ptr<Projection> projection_;
   std::vector<ConversationItem> cached_projection_items_;
