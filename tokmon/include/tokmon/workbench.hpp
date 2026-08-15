@@ -228,7 +228,7 @@ private:
   float session_max_scroll_{0};
   float pointer_x_{-1};
   float pointer_y_{-1};
-  float sidebar_width_{350};
+  float sidebar_width_{278.5F};
   float viewer_width_{0};
   std::size_t previous_item_count_{0};
   std::size_t previous_trajectory_event_count_{0};
