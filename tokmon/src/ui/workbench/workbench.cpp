@@ -36,7 +36,6 @@ constexpr Color hover_fill{246, 247, 248, 255};
 constexpr Color hover_border{207, 211, 217, 255};
 constexpr Color selected_fill{240, 242, 244, 255};
 constexpr Color accent{45, 103, 235, 255};
-constexpr Color accent_hover{34, 86, 211, 255};
 constexpr Color success{44, 169, 93, 255};
 constexpr Color warning{230, 128, 31, 255};
 constexpr Color danger{228, 69, 79, 255};
@@ -595,6 +594,15 @@ void draw_icon(RasterSurface &surface, std::string_view name, float x, float y,
   } else if (name == "send") {
     surface.line(x - 5, y + 5, x + 5, y, color, 1.7F);
     surface.line(x + 5, y, x - 5, y - 5, color, 1.7F);
+  } else if (name == "microphone") {
+    surface.stroke_rect({x - 3, y - 7, 6, 11}, color, 1.2F, 3);
+    surface.line(x - 6, y - 1, x - 6, y + 1, color, 1.2F);
+    surface.line(x - 6, y + 1, x - 3, y + 5, color, 1.2F);
+    surface.line(x - 3, y + 5, x + 3, y + 5, color, 1.2F);
+    surface.line(x + 3, y + 5, x + 6, y + 1, color, 1.2F);
+    surface.line(x + 6, y + 1, x + 6, y - 1, color, 1.2F);
+    surface.line(x, y + 5, x, y + 8, color, 1.2F);
+    surface.line(x - 4, y + 8, x + 4, y + 8, color, 1.2F);
   } else if (name == "paper-plane") {
     surface.line(x - 7, y - 5, x + 7, y - 8, color, 1.4F);
     surface.line(x + 7, y - 8, x + 3, y + 7, color, 1.4F);
@@ -1708,18 +1716,18 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
   // Composer. White owns the actual editor; this is its product projection.
   const auto &composer = last_layout_.composer;
   surface.fill_rect(
-      {composer.x + dp(1), composer.y + dp(5), composer.width, composer.height},
-      {70, 72, 78, 28}, dp(15));
-  surface.fill_rect(composer, {255, 255, 254, 255}, dp(15));
-  surface.stroke_rect(composer,
-                      Color{215, 215, 212, 255}, 1.0F, dp(15));
-  const Rect message_editor{composer.x + dp(16), composer.y + dp(12),
-                            composer.width - dp(32), dp(40)};
+      {composer.x + dp(1), composer.y + dp(7), composer.width,
+       composer.height + dp(2)},
+      {70, 72, 78, 22}, dp(22));
+  surface.fill_rect(composer, {255, 255, 255, 255}, dp(22));
+  surface.stroke_rect(composer, Color{225, 225, 223, 255}, 1.0F, dp(22));
+  const Rect message_editor{composer.x + dp(18), composer.y + dp(16),
+                            composer.width - dp(124), dp(34)};
   message_editor_bounds_ = message_editor;
   message_editor_text_ = frame.message_input;
   if (frame.message_input.empty()) {
-    label(surface, "输入消息，Enter 发送，Shift+Enter 换行", message_editor, 13,
-          muted, 400, 2);
+    label(surface, "输入消息，@ 提及，/ 使用操作", message_editor, 15,
+          Color{112, 112, 112, 255}, 400, 2);
     if (frame.message_focused && frame.caret_visible)
       surface.line(message_editor.x, message_editor.y + 1, message_editor.x,
                    message_editor.y + dp(18), {38, 92, 190, 255}, 1.4F);
@@ -1729,45 +1737,59 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
                      frame.selection_end, frame.message_focused,
                      frame.caret_visible);
   }
-  const Rect model_selector{composer.x + dp(12), composer.y + dp(65), dp(124),
+  const Rect add_attachment{composer.x + dp(10), composer.y + dp(64), dp(34),
                             dp(34)};
-  surface.fill_rect(model_selector,
-                    hovered(model_selector) ? hover_fill : panel, dp(9));
-  surface.stroke_rect(model_selector,
-                      hovered(model_selector) ? hover_border : hairline, 1,
-                      dp(9));
-  label(surface, "tokmon-pro",
-        {model_selector.x + dp(12), model_selector.y + dp(7),
-         model_selector.width - dp(36), dp(20)},
-        12, secondary, 500);
-  draw_icon(surface, "down", model_selector.x + model_selector.width - dp(15),
-            model_selector.y + model_selector.height / 2, muted);
-  // The selector remains the attachment entry point until the model-picker
-  // surface lands; this preserves the existing file workflow behind the new
-  // compact control.
-  add_hit(model_selector, WorkbenchActionKind::attach_files);
-  const Rect composer_settings{composer.x + dp(144), composer.y + dp(65),
-                               dp(34), dp(34)};
-  surface.fill_rect(composer_settings,
-                    hovered(composer_settings) ? hover_fill : panel, dp(9));
-  surface.stroke_rect(composer_settings,
-                      hovered(composer_settings) ? hover_border : hairline, 1,
-                      dp(9));
-  draw_icon(surface, "sliders", composer_settings.x + dp(17),
-            composer_settings.y + dp(17), secondary);
-  add_hit(composer_settings, WorkbenchActionKind::open_settings);
+  if (hovered(add_attachment))
+    surface.fill_rect(add_attachment, hover_fill, dp(17));
+  draw_icon(surface, "plus", add_attachment.x + add_attachment.width / 2,
+            add_attachment.y + add_attachment.height / 2, secondary);
+  add_hit(add_attachment, WorkbenchActionKind::attach_files);
 
-  const Rect send{composer.x + composer.width - dp(64), composer.y + dp(63),
-                  dp(52), dp(38)};
+  const Rect model_selector{composer.x + dp(48), composer.y + dp(64), dp(190),
+                            dp(34)};
+  if (hovered(model_selector))
+    surface.fill_rect(model_selector, hover_fill, dp(8));
+  const auto model_name = frame.model.empty() ? std::string{"tokmon-pro"}
+                                               : frame.model;
+  label(surface, model_name,
+        {model_selector.x + dp(2), model_selector.y + dp(7), dp(100), dp(20)},
+        12, secondary, 500);
+  const float model_name_width =
+      std::min(dp(108.0F), dp(7.0F * static_cast<float>(model_name.size())));
+  label(surface, "Medium",
+        {model_selector.x + dp(5) + model_name_width,
+         model_selector.y + dp(7), dp(54), dp(20)},
+        12, muted, 400);
+  draw_icon(surface, "down", model_selector.x + dp(66) + model_name_width,
+            model_selector.y + model_selector.height / 2, muted);
+  add_hit(model_selector, WorkbenchActionKind::open_settings);
+
+  const Rect microphone{composer.x + composer.width - dp(92),
+                        composer.y + dp(65), dp(32), dp(32)};
+  if (hovered(microphone))
+    surface.fill_rect(microphone, hover_fill, dp(16));
+  draw_icon(surface, "microphone", microphone.x + microphone.width / 2,
+            microphone.y + microphone.height / 2, secondary);
+  add_hit(microphone, WorkbenchActionKind::focus_message);
+
+  const Rect send{composer.x + composer.width - dp(52), composer.y + dp(62),
+                  dp(40), dp(40)};
+  const bool send_enabled = !frame.message_input.empty();
   const auto send_fill = frame.turn_active
                              ? (hovered(send) ? Color{242, 211, 211, 255}
                                               : Color{249, 232, 232, 255})
-                             : (hovered(send) ? accent_hover
-                                              : Color{93, 95, 101, 255});
-  surface.fill_rect(send, send_fill, dp(10));
-  draw_icon(surface, frame.turn_active ? "stop" : "paper-plane",
+                         : send_enabled
+                             ? (hovered(send) ? Color{66, 67, 72, 255}
+                                              : Color{82, 83, 88, 255})
+                             : (hovered(send) ? Color{226, 226, 226, 255}
+                                              : Color{238, 238, 238, 255});
+  surface.fill_rect(send, send_fill, dp(20));
+  draw_icon(surface, frame.turn_active ? "stop" : "send",
             send.x + send.width / 2, send.y + send.height / 2,
-            frame.turn_active ? danger : Color{255, 255, 255, 255});
+            frame.turn_active
+                ? danger
+                : (send_enabled ? Color{255, 255, 255, 255}
+                                : Color{145, 145, 145, 255}));
   add_hit(send, frame.turn_active ? WorkbenchActionKind::cancel_turn
                                   : WorkbenchActionKind::submit_input);
   if (!frame.attachments.empty()) {
