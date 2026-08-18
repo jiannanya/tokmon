@@ -10,6 +10,7 @@ int main(int argc, char** argv) {
     std::string config_dir_name = ".tokmon";
     bool headless_smoke = false;
     bool screenshot_demo = false;
+    std::string screenshot_state;
     std::optional<float> ui_scale;
     std::optional<int> window_width;
     std::optional<int> window_height;
@@ -26,6 +27,8 @@ int main(int argc, char** argv) {
         screenshot = argv[++index];
       } else if (value == "--screenshot-demo") {
         screenshot_demo = true;
+      } else if (value == "--screenshot-state" && index + 1 < argc) {
+        screenshot_state = argv[++index];
       } else if (value == "--ui-scale" && index + 1 < argc) {
         ui_scale = std::stof(argv[++index]);
       } else if (value == "--window-width" && index + 1 < argc) {
@@ -39,37 +42,23 @@ int main(int argc, char** argv) {
     if (ui_scale) config.ui_scale = std::clamp(*ui_scale, 0.75F, 2.0F);
     if (window_width) config.window_width = std::max(800, *window_width);
     if (window_height) config.window_height = std::max(600, *window_height);
+    config.screenshot_state = screenshot_state;
     tokmon::desktop::App app(std::move(config));
     if (!screenshot.empty()) {
       if (screenshot_demo) {
         app.projection().append_local(
             tokmon::desktop::ItemKind::user, "You",
-            "构建时报错，提示找不到 spdlog 和 fmt。请帮我修复 CMake 依赖配置，并确保可以通过编译和测试。",
-            "committed", {{"time", tokmon::iso8601()}});
+            "使用 faster-whisper 模型对音频文件进行转录，输出带时间戳的字幕（Segmentation 模式）。\n"
+            "模型路径：C:\\Models\\faster-whisper-large-v3-turbo\n"
+            "音频文件：C:\\Data\\audio.mp3\n"
+            "输出字幕文件：UTF-8 编码的 .srt",
+            "committed", {{"time", "2026-08-14T10:20:00.000Z"}});
         app.projection().append_local(
             tokmon::desktop::ItemKind::assistant, "Tokmon Agent",
-            "已分析仓库并执行修复，构建与测试均通过。",
+            "已理解你的需求，我将使用 faster-whisper 进行音频转录，并输出带时间戳的字幕文件。\n"
+            "我会分步骤完成任务并实时向你汇报进度。",
             "committed",
-            {{"time", tokmon::iso8601()}, {"elapsed_ms", 2450}});
-        app.projection().append_local(
-            tokmon::desktop::ItemKind::artifact, "CMakeLists.txt",
-            "已读取 · 2.3 KB", "loaded");
-        app.projection().append_local(
-            tokmon::desktop::ItemKind::tool, "Terminal / shell",
-            "cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release\n"
-            "cmake --build build --config Release -j 12\n"
-            "ctest --test-dir build --output-on-failure",
-            "completed");
-        app.projection().append_local(
-            tokmon::desktop::ItemKind::diagnostic, "Build diagnostics", "",
-            "inspected");
-        app.projection().append_local(
-            tokmon::desktop::ItemKind::status, "修复说明",
-            "1. 在 CMakeLists.txt 中补充依赖查找。\n"
-            "2. 为外部依赖设置别名目标并链接到应用。\n"
-            "3. 补充默认安装提示，便于 CI 与本地环境一致。\n"
-            "4. 验证构建与测试，确认问题已解决。",
-            "committed");
+            {{"time", "2026-08-14T10:21:00.000Z"}, {"elapsed_ms", 138000}});
       }
       app.capture(screenshot);
       return 0;

@@ -222,17 +222,12 @@ int main() {
     frame.trajectory_cursor = projection.cursor();
     frame.composition_epoch = 7;
     workbench.draw(workbench_surface, frame);
-    assert(workbench_surface.pixels() != nullptr);
-    // Live resize keeps one physical render target while changing its logical
-    // viewport. Drawing across both responsive breakpoints must immediately
-    // select the compact sidebar and hide the viewer on that same surface.
     workbench_surface.reconfigure(900, 700);
     workbench.draw(workbench_surface, frame);
     assert(workbench.layout(static_cast<float>(workbench_surface.width()),
                             static_cast<float>(workbench_surface.height())) ==
            narrow_layout);
     assert(workbench_surface.pixels() != nullptr);
-    // Restore the desktop viewport and hit regions for interaction checks.
     workbench_surface.reconfigure(1500, 900);
     workbench.draw(workbench_surface, frame);
     assert(workbench.selected_document() == std::filesystem::path("README.md"));
@@ -283,8 +278,6 @@ int main() {
     const float user_copy_x =
         desktop_layout.timeline.x + desktop_layout.timeline.width - 101;
     const float user_copy_y = desktop_layout.timeline.y + 78;
-    // Menu commands, message tools, primary send action and viewer controls
-    // all provide visible pointer feedback, not just click hit targets.
     assert_hover_changes("menu", frame, 150, 24);
     assert_hover_changes("message-copy", frame, user_copy_x, user_copy_y);
     assert_hover_changes("send", frame,
@@ -324,7 +317,7 @@ int main() {
     assert(action.value == "hello");
     action = workbench.dispatch(
         {"click", desktop_layout.sidebar.x + desktop_layout.sidebar.width - 50,
-         desktop_layout.sidebar.y + 111});
+         desktop_layout.sidebar.y + 32});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::new_session);
     action = workbench.dispatch({"wheel", desktop_layout.timeline.x + 10,
                                  desktop_layout.timeline.y + 10, 0, 48});
@@ -343,11 +336,12 @@ int main() {
     action = workbench.dispatch({"click", desktop_layout.composer.x + 25,
                                  desktop_layout.composer.y + 63});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::attach_files);
-    // Session order is unchanged: the first visible row is Alpha even though
+    // The Group->Project->Session tree binds the first project's sessions to
+    // the committed session list; the first session row is Alpha even though
     // the active session is the second item.
     action = workbench.dispatch(
         {"click", desktop_layout.sidebar.x + 90,
-         desktop_layout.sidebar.y + 174});
+         desktop_layout.sidebar.y + 215});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::switch_session);
     assert(action.value == "alpha-session");
 
@@ -515,7 +509,7 @@ int main() {
     action = workbench.dispatch({"click", 1145, 130});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::open_settings);
     workbench.draw(workbench_surface, frame);
-    action = workbench.dispatch({"click", 300, 266});
+    action = workbench.dispatch({"click", 300, 220});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::settings_tab);
     assert(action.value == "models");
     workbench.draw(workbench_surface, frame);
@@ -542,20 +536,23 @@ int main() {
     action = workbench.dispatch({"click", 1195, 770});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::save_settings);
 
-    // Archive and plugin workspaces use the same 1040 x 720 floating frame.
+    // 会话历史 opens the archive workspace; the shared 1040 x 720 floating
+    // frame closes from its top-right button.
     workbench.close_settings();
     workbench.draw(workbench_surface, frame);
     action = workbench.dispatch(
         {"click", desktop_layout.sidebar.x + 90,
-         desktop_layout.sidebar.y + desktop_layout.sidebar.height - 35});
+         desktop_layout.sidebar.y + 75});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::open_archive);
     workbench.draw(workbench_surface, frame);
     action = workbench.dispatch({"click", 1240, 123});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::close_archive);
+    // 插件与能力编排 lives in the account menu: open it, then pick the row.
     workbench.draw(workbench_surface, frame);
-    action = workbench.dispatch(
-        {"click", desktop_layout.sidebar.x + 90,
-         desktop_layout.sidebar.y + 330});
+    action = workbench.dispatch({"click", 1350, 25});
+    assert(action.kind == tokmon::desktop::WorkbenchActionKind::redraw);
+    workbench.draw(workbench_surface, frame);
+    action = workbench.dispatch({"click", 1145, 157});
     assert(action.kind == tokmon::desktop::WorkbenchActionKind::open_plugins);
     workbench.draw(workbench_surface, frame);
     action = workbench.dispatch({"click", 1240, 123});

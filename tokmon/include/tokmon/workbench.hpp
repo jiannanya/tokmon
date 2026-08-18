@@ -163,7 +163,11 @@ struct WorkbenchAction {
 class WorkbenchView final {
 public:
   static constexpr int sidebar_compact_breakpoint = 1040;
-  static constexpr int viewer_visible_breakpoint = 1260;
+  // Logical-width threshold below which the workspace viewer is force-hidden.
+  // Must stay at or below the default window's logical width
+  // (window_width / ui_scale = 1500 / 1.25 = 1200) so the viewer — and its
+  // expand affordance — remain reachable at the shipped default geometry.
+  static constexpr int viewer_visible_breakpoint = 1160;
 
   explicit WorkbenchView(
       std::filesystem::path workspace,
@@ -178,7 +182,15 @@ public:
     return selected_document_;
   }
   bool show_document(const std::filesystem::path &path);
+  void set_viewer_collapsed(bool collapsed) noexcept { viewer_collapsed_ = collapsed; }
   void close_settings() noexcept { settings_open_ = false; }
+  // Headless capture helpers: drive presentation-only state so a single
+  // rendered frame can exercise the settings modal or trajectory inspector.
+  void open_settings_preset(std::string tab) {
+    settings_open_ = true;
+    if (!tab.empty()) settings_tab_ = std::move(tab);
+  }
+  void set_trajectory_open(bool open) noexcept { trajectory_open_ = open; }
 
 private:
   struct FileEntry {

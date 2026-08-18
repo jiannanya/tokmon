@@ -78,6 +78,16 @@ std::string *editable_setting(DesktopSettings &settings,
     return &settings.request_timeout_ms;
   if (field == "max_steps")
     return &settings.max_steps;
+  if (field == "default_workspace")
+    return &settings.default_workspace;
+  if (field == "account_name")
+    return &settings.account_name;
+  if (field == "account_email")
+    return &settings.account_email;
+  if (field == "account_plan")
+    return &settings.account_plan;
+  if (field == "dnd_hours")
+    return &settings.dnd_hours;
   return nullptr;
 }
 
@@ -144,6 +154,7 @@ App::App(AppConfig config)
       approvals_(std::make_shared<ApprovalCoordinator>()),
       projection_(std::make_shared<Projection>()) {
   settings_ = load_desktop_settings(config_.workspace, config_.config_dir_name);
+  workbench_->set_viewer_collapsed(true);
   if (config_.model.empty())
     config_.model = settings_.model;
   config_.max_steps =
@@ -290,6 +301,16 @@ App::~App() {
 int App::run() { return window_->run(); }
 
 void App::capture(const std::filesystem::path &path) {
+  const std::string &state = config_.screenshot_state;
+  if (state == "viewer") {
+    workbench_->set_viewer_collapsed(false);
+  } else if (state == "trajectory") {
+    workbench_->set_trajectory_open(true);
+  } else if (state.starts_with("settings")) {
+    const auto colon = state.find(':');
+    workbench_->open_settings_preset(
+        colon == std::string::npos ? std::string{} : state.substr(colon + 1));
+  }
   window_->save_screenshot(path);
 }
 
@@ -851,6 +872,11 @@ void App::apply_setting(std::string value, std::size_t index) {
     if (auto *field = editable_setting(settings_, active_settings_field_))
       *field = editor.value;
   }
+  if (value == "reset_defaults") {
+    settings_ = DesktopSettings{};
+    window_->invalidate();
+    return;
+  }
   if (value == "plugin") {
     if (index < settings_.plugins.size() && !settings_.plugins[index].required)
       settings_.plugins[index].disabled = !settings_.plugins[index].disabled;
@@ -862,10 +888,26 @@ void App::apply_setting(std::string value, std::size_t index) {
     return;
   const auto key = value.substr(0, separator);
   const auto selected = value.substr(separator + 1);
+
+  // Tab 1: 通用
   if (key == "language")
     settings_.language = selected;
-  else if (key == "theme")
-    settings_.theme = selected;
+  else if (key == "open_on_startup")
+    settings_.open_on_startup = selected;
+  else if (key == "auto_save_interval")
+    settings_.auto_save_interval = selected;
+  else if (key == "update_channel")
+    settings_.update_channel = selected;
+
+  // Tab 2: 智能体与模型
+  else if (key == "default_agent")
+    settings_.default_agent = selected;
+  else if (key == "provider_mode")
+    settings_.provider_mode = selected;
+  else if (key == "model")
+    settings_.model = selected;
+  else if (key == "reasoning_effort")
+    settings_.reasoning_effort = selected;
   else if (key == "provider_template") {
     settings_.provider_id = "custom_provider";
     settings_.provider_name = "Custom provider";
@@ -881,14 +923,62 @@ void App::apply_setting(std::string value, std::size_t index) {
       settings_.max_steps = "16";
     else
       settings_.max_steps = "32";
-  } else if (key == "default_permission")
+  }
+
+  // Tab 3: 权限与安全
+  else if (key == "file_access")
+    settings_.file_access = selected;
+  else if (key == "command_approval")
+    settings_.command_approval = selected;
+  else if (key == "network_access")
+    settings_.network_access = (selected == "true" || selected == "1" || selected == "toggle" ? !settings_.network_access : false);
+  else if (key == "high_risk_confirm")
+    settings_.high_risk_confirm = (selected == "true" || selected == "1" || selected == "toggle" ? !settings_.high_risk_confirm : false);
+  else if (key == "default_permission")
     settings_.default_permission = selected;
-  else if (key == "auto_scroll")
+
+  // Tab 4: 工作区
+  else if (key == "default_workspace")
+    settings_.default_workspace = selected;
+  else if (key == "index_mode")
+    settings_.index_mode = selected;
+  else if (key == "auto_sync")
+    settings_.auto_sync = (selected == "true" || selected == "1" || selected == "toggle" ? !settings_.auto_sync : false);
+  else if (key == "git_integration")
+    settings_.git_integration = (selected == "true" || selected == "1" || selected == "toggle" ? !settings_.git_integration : false);
+
+  // Tab 5: 通知
+  else if (key == "enable_notifications")
+    settings_.enable_notifications = (selected == "true" || selected == "1" || selected == "toggle" ? !settings_.enable_notifications : false);
+  else if (key == "desktop_notifications")
+    settings_.desktop_notifications = (selected == "true" || selected == "1" || selected == "toggle" ? !settings_.desktop_notifications : false);
+  else if (key == "message_alerts")
+    settings_.message_alerts = (selected == "true" || selected == "1" || selected == "toggle" ? !settings_.message_alerts : false);
+  else if (key == "dnd_hours")
+    settings_.dnd_hours = selected;
+
+  // Tab 6: 外观
+  else if (key == "theme")
+    settings_.theme = selected;
+  else if (key == "accent_color")
+    settings_.accent_color = selected;
+  else if (key == "ui_density")
+    settings_.ui_density = selected;
+  else if (key == "font_size_percent") {
+    try {
+      settings_.font_size_percent = std::stoi(selected);
+    } catch (...) {}
+  } else if (key == "auto_scroll")
     settings_.auto_scroll = selected == "true";
   else if (key == "raw_trace")
     settings_.raw_trace = selected == "true";
   else if (key == "restart_enabled")
     settings_.restart_enabled = selected == "true";
+
+  // Tab 8: 账户
+  else if (key == "cloud_sync")
+    settings_.cloud_sync = (selected == "true" || selected == "1" || selected == "toggle" ? !settings_.cloud_sync : false);
+
   window_->invalidate();
 }
 

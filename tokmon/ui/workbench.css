@@ -1,8 +1,8 @@
 /* White supports a deliberately small, deterministic CSS subset. Complex
    controls are native components mounted at the data-native boundaries. */
 body {
-  background: #f8f8f7;
-  color: #1d1f24;
+  background: #f7f7f5;
+  color: #1e1f24;
   font-size: 14px;
   overflow: hidden;
 }
@@ -15,7 +15,7 @@ body {
 #menu-bar {
   height: 51px;
   min-height: 51px;
-  background: #f8f8f7;
+  background: #f7f7f5;
 }
 
 #workbench-body {
@@ -31,10 +31,10 @@ body {
 
 #sidebar {
   min-width: 0px;
-  background: #fbfbfa;
-  border-color: #e5e6e7;
+  background: #fdfdfd;
+  border-color: #e8e8e6;
   border-width: 1px;
-  border-radius: 11px;
+  border-radius: 12px;
   overflow: hidden;
 }
 
@@ -42,16 +42,16 @@ body {
   flex-grow: 1;
   min-width: 256px;
   background: #ffffff;
-  border-color: #e5e6e7;
+  border-color: #e8e8e6;
   border-width: 1px;
-  border-radius: 11px;
+  border-radius: 12px;
   overflow: hidden;
 }
 
 #conversation-header {
   height: 50px;
   min-height: 50px;
-  border-color: #e5e6e7;
+  border-color: #e8e8e6;
   border-width: 1px;
 }
 
@@ -76,16 +76,16 @@ body {
 #viewer {
   min-width: 0px;
   background: #ffffff;
-  border-color: #e5e6e7;
+  border-color: #e8e8e6;
   border-width: 1px;
-  border-radius: 11px;
+  border-radius: 12px;
   overflow: hidden;
 }
 
 #viewer-header {
   height: 50px;
   min-height: 50px;
-  border-color: #e5e6e7;
+  border-color: #e8e8e6;
   border-width: 1px;
 }
 
@@ -104,7 +104,7 @@ body {
 #explorer {
   min-width: 0px;
   background: #ffffff;
-  border-color: #e5e6e7;
+  border-color: #e8e8e6;
   border-width: 1px;
   overflow: hidden;
 }

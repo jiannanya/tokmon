@@ -39,6 +39,8 @@ struct AppConfig {
   std::chrono::milliseconds request_timeout{std::chrono::minutes(5)};
   std::string model;
   std::size_t max_steps{32};
+  // Headless capture preset: "", "viewer", "trajectory", or "settings:<tab>".
+  std::string screenshot_state;
 };
 
 class App final {

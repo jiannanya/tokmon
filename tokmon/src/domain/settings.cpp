@@ -53,16 +53,63 @@ DesktopSettings load_desktop_settings(const std::filesystem::path &workspace,
   const auto restart = snow_config.value("restart", tokmon::Json::object());
   const auto ui = product.value("ui", tokmon::Json::object());
   const auto agent = product.value("agent", tokmon::Json::object());
+  const auto security = product.value("security", tokmon::Json::object());
+  const auto ws_cfg = product.value("workspace", tokmon::Json::object());
+  const auto notif = product.value("notifications", tokmon::Json::object());
+  const auto account = product.value("account", tokmon::Json::object());
+
+  // 1. 通用
   result.language = ui.value("language", result.language);
+  result.open_on_startup = ui.value("open_on_startup", result.open_on_startup);
+  result.auto_save_interval = ui.value("auto_save_interval", result.auto_save_interval);
+  result.update_channel = ui.value("update_channel", result.update_channel);
+
+  // 2. 智能体与模型
+  result.default_agent = agent.value("default_agent", result.default_agent);
+  result.provider_mode = agent.value("provider_mode", result.provider_mode);
+  result.reasoning_effort = agent.value("reasoning_effort", result.reasoning_effort);
+  result.agent_preset = agent.value("preset", result.agent_preset);
+  result.max_steps = std::to_string(agent.value("max_steps", 32ULL));
+  result.model = product.value("model", result.model);
+
+  // 3. 权限与安全
+  result.file_access = security.value("file_access", result.file_access);
+  result.command_approval = security.value("command_approval", result.command_approval);
+  result.network_access = security.value("network_access", result.network_access);
+  result.high_risk_confirm = security.value("high_risk_confirm", result.high_risk_confirm);
+
+  // 4. 工作区
+  result.default_workspace = ws_cfg.value("default_workspace", result.default_workspace);
+  result.index_mode = ws_cfg.value("index_mode", result.index_mode);
+  result.auto_sync = ws_cfg.value("auto_sync", result.auto_sync);
+  result.git_integration = ws_cfg.value("git_integration", result.git_integration);
+
+  // 5. 通知
+  result.enable_notifications = notif.value("enable_notifications", result.enable_notifications);
+  result.desktop_notifications = notif.value("desktop_notifications", result.desktop_notifications);
+  result.message_alerts = notif.value("message_alerts", result.message_alerts);
+  result.dnd_hours = notif.value("dnd_hours", result.dnd_hours);
+
+  // 6. 外观
   result.theme = ui.value("theme", result.theme);
+  result.accent_color = ui.value("accent_color", result.accent_color);
+  result.ui_density = ui.value("ui_density", result.ui_density);
+  result.font_size_percent = ui.value("font_size_percent", result.font_size_percent);
   result.auto_scroll = ui.value("auto_scroll", result.auto_scroll);
+
+  // 7. 快捷键
+  result.shortcut_preset = ui.value("shortcut_preset", result.shortcut_preset);
+
+  // 8. 账户
+  result.account_name = account.value("name", result.account_name);
+  result.account_email = account.value("email", result.account_email);
+  result.account_plan = account.value("plan", result.account_plan);
+  result.cloud_sync = account.value("cloud_sync", result.cloud_sync);
+
   result.raw_trace = snow_config.value("raw_trace", result.raw_trace);
   result.restart_enabled = restart.value("enabled", result.restart_enabled);
   result.request_timeout_ms =
       std::to_string(snow_config.value("request_timeout_ms", 300000ULL));
-  result.agent_preset = agent.value("preset", result.agent_preset);
-  result.max_steps = std::to_string(agent.value("max_steps", 32ULL));
-  result.model = product.value("model", result.model);
 
   const auto providers =
       load_existing(layout.providers, tokmon::Json::object());
@@ -75,7 +122,8 @@ DesktopSettings load_desktop_settings(const std::filesystem::path &workspace,
   result.provider_kind = provider.value("kind", result.provider_kind);
   result.endpoint = provider.value("endpoint", result.endpoint);
   result.api_key_env = provider.value("api_key_env", result.api_key_env);
-  result.model = provider.value("model", result.model);
+  if (provider.contains("model"))
+    result.model = provider.value("model", result.model);
 
   const auto policy = load_existing(layout.policy, tokmon::Json::object());
   result.default_permission = policy.value("defaults", tokmon::Json::object())
@@ -136,17 +184,62 @@ void save_desktop_settings(const std::filesystem::path &workspace,
   if (!restart.is_object())
     restart = tokmon::Json::object();
   restart["enabled"] = settings.restart_enabled;
+
   auto &ui = product["ui"];
   if (!ui.is_object())
     ui = tokmon::Json::object();
   ui["language"] = settings.language;
+  ui["open_on_startup"] = settings.open_on_startup;
+  ui["auto_save_interval"] = settings.auto_save_interval;
+  ui["update_channel"] = settings.update_channel;
   ui["theme"] = settings.theme;
+  ui["accent_color"] = settings.accent_color;
+  ui["ui_density"] = settings.ui_density;
+  ui["font_size_percent"] = settings.font_size_percent;
   ui["auto_scroll"] = settings.auto_scroll;
+  ui["shortcut_preset"] = settings.shortcut_preset;
+
   auto &agent = product["agent"];
   if (!agent.is_object())
     agent = tokmon::Json::object();
+  agent["default_agent"] = settings.default_agent;
+  agent["provider_mode"] = settings.provider_mode;
+  agent["reasoning_effort"] = settings.reasoning_effort;
   agent["preset"] = settings.agent_preset;
   agent["max_steps"] = positive_integer(settings.max_steps, 32, 1, 1024);
+
+  auto &security = product["security"];
+  if (!security.is_object())
+    security = tokmon::Json::object();
+  security["file_access"] = settings.file_access;
+  security["command_approval"] = settings.command_approval;
+  security["network_access"] = settings.network_access;
+  security["high_risk_confirm"] = settings.high_risk_confirm;
+
+  auto &ws_cfg = product["workspace"];
+  if (!ws_cfg.is_object())
+    ws_cfg = tokmon::Json::object();
+  ws_cfg["default_workspace"] = settings.default_workspace;
+  ws_cfg["index_mode"] = settings.index_mode;
+  ws_cfg["auto_sync"] = settings.auto_sync;
+  ws_cfg["git_integration"] = settings.git_integration;
+
+  auto &notif = product["notifications"];
+  if (!notif.is_object())
+    notif = tokmon::Json::object();
+  notif["enable_notifications"] = settings.enable_notifications;
+  notif["desktop_notifications"] = settings.desktop_notifications;
+  notif["message_alerts"] = settings.message_alerts;
+  notif["dnd_hours"] = settings.dnd_hours;
+
+  auto &account = product["account"];
+  if (!account.is_object())
+    account = tokmon::Json::object();
+  account["name"] = settings.account_name;
+  account["email"] = settings.account_email;
+  account["plan"] = settings.account_plan;
+  account["cloud_sync"] = settings.cloud_sync;
+
   write_json(layout.config_root / "tokmon.json", product);
 
   auto providers = load_existing(layout.providers, tokmon::Json::object());

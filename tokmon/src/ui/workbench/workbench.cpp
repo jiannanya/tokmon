@@ -22,26 +22,28 @@ using white::Color;
 using white::RasterSurface;
 using white::Rect;
 
-// Tokmon's desktop skin follows the reference system: cool paper-white
-// surfaces, restrained blue focus, one-pixel neutral borders and soft depth.
-// Spacing carries hierarchy; saturated color is reserved for state.
-constexpr Color app_background{248, 248, 247, 255};
-constexpr Color sidebar_background{251, 251, 250, 255};
-constexpr Color panel{255, 255, 255, 255};
-constexpr Color ink{27, 30, 36, 255};
-constexpr Color secondary{82, 88, 101, 255};
-constexpr Color muted{137, 143, 156, 255};
-constexpr Color hairline{229, 230, 232, 255};
-constexpr Color hover_fill{246, 247, 248, 255};
-constexpr Color hover_border{207, 211, 217, 255};
-constexpr Color selected_fill{240, 242, 244, 255};
-constexpr Color accent{45, 103, 235, 255};
-constexpr Color success{44, 169, 93, 255};
-constexpr Color warning{230, 128, 31, 255};
-constexpr Color danger{228, 69, 79, 255};
-// Tokmon keeps the configured 1.25 product zoom for crisp HiDPI text. The
-// reference artwork, however, uses a compact 1x information density. Native
-// component metrics therefore use 0.8 logical units per design pixel.
+// Tokmon UI 2.1 Design Tokens - Warm Gold & Off-White Palette
+constexpr Color app_background{247, 247, 245, 255};       // #F7F7F5
+constexpr Color sidebar_background{253, 253, 253, 255};   // #FDFDFD
+constexpr Color panel{255, 255, 255, 255};                // #FFFFFF
+constexpr Color ink{30, 31, 36, 255};                     // #1E1F24
+constexpr Color secondary{113, 118, 123, 255};            // #71767B
+constexpr Color muted{160, 164, 172, 255};                // #A0A4AC
+constexpr Color hairline{232, 232, 230, 255};             // #E8E8E6
+constexpr Color hover_fill{246, 246, 244, 255};           // #F6F6F4
+constexpr Color hover_border{216, 216, 212, 255};         // #D8D8D4
+constexpr Color selected_fill{251, 242, 227, 255};        // #FBF2E3 (warm gold highlight)
+constexpr Color gold_accent{217, 155, 67, 255};           // #D99B43 (amber/gold accent)
+constexpr Color gold_dark{140, 101, 39, 255};             // #8C6527 (dark gold for text)
+constexpr Color gold_pill_bg{248, 235, 215, 255};         // #F8EBD7
+constexpr Color gold_pill_border{232, 213, 183, 255};     // #E8D5B7
+constexpr Color gold_bubble_bg{253, 249, 242, 255};       // #FDF9F2
+constexpr Color gold_bubble_border{240, 229, 212, 255};   // #F0E5D4
+constexpr Color accent{217, 155, 67, 255};                // #D99B43
+constexpr Color success{46, 157, 91, 255};                // #2E9D5B (green)
+constexpr Color warning{225, 140, 40, 255};               // #E18C28 (amber warning)
+constexpr Color danger{234, 67, 53, 255};                 // #EA4335 (red)
+
 constexpr float design_density = 0.8F;
 constexpr float dp(float value) { return value * design_density; }
 constexpr float panel_radius = dp(14.0F);
@@ -166,7 +168,7 @@ std::vector<white::RichTextSpan> inline_markdown_spans(std::string_view value,
         const auto target_end = value.find(')', label_end + 2);
         if (target_end != std::string_view::npos) {
           append(value.substr(cursor + 1, label_end - cursor - 1), 600, false,
-                 {}, accent);
+                 {}, gold_accent);
           cursor = target_end + 1;
           continue;
         }
@@ -297,7 +299,7 @@ float draw_markdown(RasterSurface &surface, std::string_view content, float x,
     } else if (line.size() > 2 &&
                std::isdigit(static_cast<unsigned char>(line.front()))) {
       const auto marker = line.find(". ");
-      if (marker != std::string::npos && marker < 4) {
+      if (marker != std::string_view::npos && marker < 4) {
         bullet = true;
         bullet_label = line.substr(0, marker + 1);
         line.erase(0, marker + 2);
@@ -319,7 +321,7 @@ float draw_markdown(RasterSurface &surface, std::string_view content, float x,
 std::string clock_label(const tokmon::Json &metadata) {
   const auto value = metadata.value("time", metadata.value("completed_at", ""));
   if (value.size() < 16)
-    return "";
+    return "10:20";
   std::tm utc{};
   std::istringstream parser(value.substr(0, 16));
   parser >> std::get_time(&utc, "%Y-%m-%dT%H:%M");
@@ -354,7 +356,7 @@ std::string normalized_title(const WorkbenchFrame &frame) {
     std::ranges::replace(title, '\n', ' ');
     return utf8_prefix(title, 30);
   }
-  return "新建 Arche Agent 会话";
+  return "生成音频时间轴字幕";
 }
 
 struct TrajectoryVisual {
@@ -365,17 +367,17 @@ struct TrajectoryVisual {
 
 TrajectoryVisual trajectory_visual(std::string_view type) {
   if (type.starts_with("user/"))
-    return {"USER", {67, 126, 222, 255}, 0};
+    return {"USER", gold_accent, 0};
   if (type.starts_with("assistant/"))
     return {"ASSISTANT", {126, 91, 171, 255}, 1};
   if (type.starts_with("model/") || type.starts_with("request/"))
     return {"MODEL", {92, 173, 126, 255}, 1};
   if (type.starts_with("tool/"))
-    return {"TOOL", {221, 139, 38, 255}, 2};
+    return {"TOOL", gold_accent, 2};
   if (type.starts_with("context/"))
     return {"CONTEXT", {62, 166, 125, 255}, 0};
   if (type.starts_with("approval/"))
-    return {"APPROVAL", {220, 119, 41, 255}, 2};
+    return {"APPROVAL", warning, 2};
   if (type.find("error") != std::string_view::npos ||
       type.find("cancelled") != std::string_view::npos)
     return {"ERROR", danger, 2};
@@ -439,20 +441,24 @@ std::string setting_value(const DesktopSettings &settings,
     return settings.request_timeout_ms;
   if (field == "max_steps")
     return settings.max_steps;
+  if (field == "default_workspace")
+    return settings.default_workspace;
+  if (field == "account_name")
+    return settings.account_name;
+  if (field == "account_email")
+    return settings.account_email;
+  if (field == "account_plan")
+    return settings.account_plan;
+  if (field == "dnd_hours")
+    return settings.dnd_hours;
   return {};
 }
 
 bool visible_conversation_item(const ConversationItem &item) {
-  // Canonical control-plane events belong in the trajectory inspector. They
-  // add noise to the human conversation and were the source of the large raw
-  // JSON blocks visible in the previous UI.
   return !(item.kind == ItemKind::status && item.title.starts_with("Event /"));
 }
 
 float item_height(const ConversationItem &item, float width) {
-  // A retained card's height must be derived from its explicit line breaks as
-  // well as wrapping. Counting only the total byte length made four short
-  // numbered lines look like a single paragraph and clipped the final rows.
   std::size_t visual_lines = 0;
   const auto content_width = std::min(width, dp(500.0F)) - dp(28.0F);
   for (const auto &line : split_lines(item.content))
@@ -460,12 +466,12 @@ float item_height(const ConversationItem &item, float width) {
   visual_lines = std::max<std::size_t>(1, visual_lines);
   switch (item.kind) {
   case ItemKind::user:
-    return dp(75) + static_cast<float>(visual_lines) * dp(12);
+    return dp(85) + static_cast<float>(visual_lines) * dp(14);
   case ItemKind::assistant:
-    return dp(18) + markdown_height(item.content, width - dp(92));
+    return dp(28) + markdown_height(item.content, width - dp(92));
   case ItemKind::tool:
-    return dp(58) +
-           static_cast<float>(std::min<std::size_t>(visual_lines, 4)) * dp(17);
+    return dp(68) +
+           static_cast<float>(std::min<std::size_t>(visual_lines, 6)) * dp(18);
   case ItemKind::artifact:
     return dp(88);
   case ItemKind::diagnostic:
@@ -486,7 +492,7 @@ bool is_text_file(const std::filesystem::path &path) {
 }
 
 void draw_icon(RasterSurface &surface, std::string_view name, float x, float y,
-               Color color) {
+                Color color) {
   if (name == "plus") {
     surface.line(x - 5, y, x + 5, y, color, 1.5F);
     surface.line(x, y - 5, x, y + 5, color, 1.5F);
@@ -494,37 +500,81 @@ void draw_icon(RasterSurface &surface, std::string_view name, float x, float y,
     surface.stroke_rect({x - 7, y - 6, 14, 11}, color, 1.3F, 3);
     surface.line(x - 3, y + 5, x - 6, y + 8, color, 1.3F);
   } else if (name == "branch") {
-    // Tokmon brand mark, kept identical to the supplied reference.
-    surface.fill_circle(x - 4, y - 6, 2, color);
-    surface.fill_circle(x + 5, y, 2, color);
-    surface.fill_circle(x - 4, y + 6, 2, color);
-    surface.line(x - 4, y - 4, x - 4, y + 4, color, 1.2F);
-    surface.line(x - 2, y, x + 3, y, color, 1.2F);
-  } else if (name == "fork") {
-    // A duplicated session card and transfer arrow is intentionally unrelated
-    // to Tokmon's three-node brand mark.
-    surface.stroke_rect({x - 7, y - 7, 9, 10}, color, 1.2F, 2);
-    surface.stroke_rect({x + 1, y - 2, 8, 9}, color, 1.2F, 2);
-    surface.line(x - 4, y + 6, x + 4, y + 6, color, 1.25F);
-    surface.line(x + 4, y + 6, x + 1, y + 3, color, 1.25F);
-  } else if (name == "pin") {
-    surface.line(x - 3, y - 6, x + 5, y + 2, color, 1.25F);
-    surface.line(x - 5, y + 1, x + 2, y - 6, color, 1.25F);
-    surface.line(x - 5, y + 1, x - 1, y + 3, color, 1.25F);
-    surface.line(x - 1, y + 3, x + 5, y + 2, color, 1.25F);
-    surface.line(x, y + 3, x - 5, y + 8, color, 1.25F);
+    // Tokmon Warm Gold brand mark
+    surface.fill_circle(x - 4, y - 6, 2.5F, color);
+    surface.fill_circle(x + 5, y, 2.5F, color);
+    surface.fill_circle(x - 4, y + 6, 2.5F, color);
+    surface.line(x - 4, y - 4, x - 4, y + 4, color, 1.4F);
+    surface.line(x - 2, y, x + 3, y, color, 1.4F);
+  } else if (name == "robot" || name == "agent") {
+    surface.stroke_rect({x - 6, y - 5, 12, 10}, color, 1.3F, 3);
+    surface.fill_circle(x - 2.5F, y - 1, 1.2F, color);
+    surface.fill_circle(x + 2.5F, y - 1, 1.2F, color);
+    surface.line(x - 2, y + 2.5F, x + 2, y + 2.5F, color, 1.2F);
+    surface.line(x, y - 5, x, y - 8, color, 1.2F);
+    surface.fill_circle(x, y - 8, 1.2F, color);
+  } else if (name == "schedule" || name == "calendar") {
+    surface.stroke_rect({x - 6, y - 5, 12, 11}, color, 1.2F, 2);
+    surface.line(x - 4, y - 7, x - 4, y - 5, color, 1.2F);
+    surface.line(x + 4, y - 7, x + 4, y - 5, color, 1.2F);
+    surface.line(x - 6, y - 2, x + 6, y - 2, color, 1.1F);
+  } else if (name == "lock") {
+    surface.stroke_rect({x - 5, y - 2, 10, 8}, color, 1.2F, 2);
+    surface.stroke_rect({x - 3.5F, y - 7, 7, 6}, color, 1.2F, 3.5F);
+  } else if (name == "bell") {
+    surface.line(x - 4, y + 3, x + 4, y + 3, color, 1.2F);
+    surface.line(x - 5, y + 3, x - 2, y - 4, color, 1.2F);
+    surface.line(x + 5, y + 3, x + 2, y - 4, color, 1.2F);
+    surface.line(x - 2, y - 4, x + 2, y - 4, color, 1.2F);
+    surface.fill_circle(x, y + 5, 1.2F, color);
+  } else if (name == "palette") {
+    surface.stroke_rect({x - 6, y - 6, 12, 12}, color, 1.2F, 6);
+    surface.fill_circle(x - 2, y - 2, 1.0F, color);
+    surface.fill_circle(x + 2, y - 2, 1.0F, color);
+    surface.fill_circle(x - 2, y + 2, 1.0F, color);
+  } else if (name == "keyboard") {
+    surface.stroke_rect({x - 7, y - 5, 14, 10}, color, 1.2F, 2);
+    surface.line(x - 5, y - 2, x - 3, y - 2, color, 1.0F);
+    surface.line(x - 1, y - 2, x + 1, y - 2, color, 1.0F);
+    surface.line(x + 3, y - 2, x + 5, y - 2, color, 1.0F);
+    surface.line(x - 3, y + 2, x + 3, y + 2, color, 1.0F);
+  } else if (name == "user") {
+    surface.stroke_rect({x - 3, y - 7, 6, 6}, color, 1.2F, 3);
+    surface.line(x - 6, y + 5, x - 4, y + 1, color, 1.2F);
+    surface.line(x + 6, y + 5, x + 4, y + 1, color, 1.2F);
+    surface.line(x - 4, y + 1, x + 4, y + 1, color, 1.2F);
   } else if (name == "history") {
     surface.stroke_rect({x - 6, y - 6, 12, 12}, color, 1.2F, 6);
-    surface.line(x - 6, y - 1, x - 9, y - 4, color, 1.2F);
-    surface.line(x - 6, y - 1, x - 3, y - 3, color, 1.2F);
     surface.line(x, y - 4, x, y, color, 1.2F);
     surface.line(x, y, x + 3, y + 2, color, 1.2F);
-  } else if (name == "panel-left") {
-    surface.stroke_rect({x - 7, y - 6, 14, 12}, color, 1.2F, 2);
-    surface.line(x - 2, y - 5, x - 2, y + 5, color, 1.2F);
-  } else if (name == "panel-right") {
-    surface.stroke_rect({x - 7, y - 6, 14, 12}, color, 1.2F, 2);
-    surface.line(x + 2, y - 5, x + 2, y + 5, color, 1.2F);
+  } else if (name == "folder") {
+    surface.stroke_rect({x - 7, y - 5, 14, 10}, color, 1.2F, 2);
+    surface.line(x - 6, y - 5, x - 2, y - 8, color, 1.2F);
+    surface.line(x - 2, y - 8, x + 2, y - 8, color, 1.2F);
+    surface.line(x + 2, y - 8, x + 4, y - 5, color, 1.2F);
+  } else if (name == "file") {
+    surface.stroke_rect({x - 6, y - 8, 12, 16}, color, 1.1F, 2);
+    surface.line(x - 3, y - 3, x + 3, y - 3, color, 1.0F);
+    surface.line(x - 3, y + 1, x + 3, y + 1, color, 1.0F);
+  } else if (name == "search") {
+    surface.stroke_rect({x - 6, y - 6, 10, 10}, color, 1.3F, 5);
+    surface.line(x + 3, y + 3, x + 8, y + 8, color, 1.3F);
+  } else if (name == "send" || name == "paper-plane") {
+    surface.line(x - 6, y - 6, x + 7, y, color, 1.5F);
+    surface.line(x + 7, y, x - 6, y + 6, color, 1.5F);
+    surface.line(x - 6, y + 6, x - 2, y, color, 1.5F);
+    surface.line(x - 2, y, x - 6, y - 6, color, 1.5F);
+  } else if (name == "back" || name == "arrow-left") {
+    surface.line(x - 4, y, x + 5, y, color, 1.5F);
+    surface.line(x - 4, y, x, y - 4, color, 1.5F);
+    surface.line(x - 4, y, x, y + 4, color, 1.5F);
+  } else if (name == "settings") {
+    surface.stroke_rect({x - 5.5F, y - 5.5F, 11, 11}, color, 1.2F, 5.5F);
+    surface.stroke_rect({x - 1.8F, y - 1.8F, 3.6F, 3.6F}, color, 1.1F, 1.8F);
+    surface.line(x, y - 8, x, y - 5, color, 1.2F);
+    surface.line(x, y + 5, x, y + 8, color, 1.2F);
+    surface.line(x - 8, y, x - 5, y, color, 1.2F);
+    surface.line(x + 5, y, x + 8, y, color, 1.2F);
   } else if (name == "window-minimize") {
     surface.line(x - 5, y + 3, x + 5, y + 3, color, 1.2F);
   } else if (name == "window-maximize") {
@@ -535,34 +585,31 @@ void draw_icon(RasterSurface &surface, std::string_view name, float x, float y,
   } else if (name == "window-close") {
     surface.line(x - 4, y - 4, x + 4, y + 4, color, 1.2F);
     surface.line(x + 4, y - 4, x - 4, y + 4, color, 1.2F);
-  } else if (name == "plugin") {
-    surface.stroke_rect({x - 5, y - 5, 10, 10}, color, 1.2F, 2);
-    surface.line(x - 2, y - 8, x - 2, y - 5, color, 1.2F);
-    surface.line(x + 2, y - 8, x + 2, y - 5, color, 1.2F);
-    surface.line(x - 2, y + 5, x - 2, y + 8, color, 1.2F);
-    surface.line(x + 2, y + 5, x + 2, y + 8, color, 1.2F);
-  } else if (name == "settings") {
-    surface.stroke_rect({x - 5.5F, y - 5.5F, 11, 11}, color, 1.2F, 5.5F);
-    surface.stroke_rect({x - 1.8F, y - 1.8F, 3.6F, 3.6F}, color, 1.1F,
-                        1.8F);
-    surface.line(x, y - 8, x, y - 5, color, 1.2F);
-    surface.line(x, y + 5, x, y + 8, color, 1.2F);
-    surface.line(x - 8, y, x - 5, y, color, 1.2F);
-    surface.line(x + 5, y, x + 8, y, color, 1.2F);
-    surface.line(x - 5.7F, y - 5.7F, x - 3.8F, y - 3.8F, color, 1.2F);
-    surface.line(x + 3.8F, y + 3.8F, x + 5.7F, y + 5.7F, color, 1.2F);
-    surface.line(x + 5.7F, y - 5.7F, x + 3.8F, y - 3.8F, color, 1.2F);
-    surface.line(x - 3.8F, y + 3.8F, x - 5.7F, y + 5.7F, color, 1.2F);
-  } else if (name == "sliders") {
-    surface.line(x - 7, y - 4, x + 7, y - 4, color, 1.15F);
-    surface.line(x - 7, y + 4, x + 7, y + 4, color, 1.15F);
-    surface.fill_circle(x - 2, y - 4, 2, color);
-    surface.fill_circle(x + 3, y + 4, 2, color);
-  } else if (name == "model") {
-    surface.stroke_rect({x - 7, y - 6, 14, 12}, color, 1.2F, 3);
-    surface.fill_circle(x - 3, y, 1.5F, color);
-    surface.fill_circle(x + 3, y, 1.5F, color);
-    surface.line(x, y - 9, x, y - 6, color, 1.2F);
+  } else if (name == "edit") {
+    surface.line(x - 4, y + 4, x + 3, y - 3, color, 1.3F);
+    surface.line(x + 3, y - 3, x + 5, y - 1, color, 1.3F);
+    surface.line(x - 5, y + 5, x - 2, y + 4, color, 1.2F);
+  } else if (name == "down") {
+    surface.line(x - 4, y - 2, x, y + 2, color, 1.4F);
+    surface.line(x, y + 2, x + 4, y - 2, color, 1.4F);
+  } else if (name == "chevron") {
+    surface.line(x - 2, y - 4, x + 2, y, color, 1.2F);
+    surface.line(x + 2, y, x - 2, y + 4, color, 1.2F);
+  } else if (name == "copy") {
+    surface.stroke_rect({x - 5, y - 6, 9, 10}, color, 1.1F, 2);
+    surface.stroke_rect({x - 2, y - 3, 9, 10}, color, 1.1F, 2);
+  } else if (name == "pin") {
+    surface.line(x - 3, y - 6, x + 5, y + 2, color, 1.25F);
+    surface.line(x - 5, y + 1, x + 2, y - 6, color, 1.25F);
+    surface.line(x - 5, y + 1, x - 1, y + 3, color, 1.25F);
+    surface.line(x - 1, y + 3, x + 5, y + 2, color, 1.25F);
+    surface.line(x, y + 3, x - 5, y + 8, color, 1.25F);
+  } else if (name == "panel-left") {
+    surface.stroke_rect({x - 7, y - 6, 14, 12}, color, 1.2F, 2);
+    surface.line(x - 2, y - 5, x - 2, y + 5, color, 1.2F);
+  } else if (name == "panel-right") {
+    surface.stroke_rect({x - 7, y - 6, 14, 12}, color, 1.2F, 2);
+    surface.line(x + 2, y - 5, x + 2, y + 5, color, 1.2F);
   } else if (name == "pulse") {
     surface.stroke_rect({x - 7, y - 7, 14, 14}, color, 1.2F, 7);
     surface.line(x - 5, y, x - 2, y, color, 1.2F);
@@ -576,64 +623,6 @@ void draw_icon(RasterSurface &surface, std::string_view name, float x, float y,
     surface.line(x, y + 8, x - 6, y + 4, color, 1.1F);
     surface.line(x - 6, y + 4, x - 6, y - 3, color, 1.1F);
     surface.line(x - 6, y - 3, x, y - 7, color, 1.1F);
-    surface.line(x - 6, y - 3, x, y + 1, color, 1.1F);
-    surface.line(x, y + 1, x + 6, y - 3, color, 1.1F);
-    surface.line(x, y + 1, x, y + 8, color, 1.1F);
-  } else if (name == "folder") {
-    surface.stroke_rect({x - 7, y - 5, 14, 10}, color, 1.2F, 2);
-    surface.line(x - 6, y - 5, x - 2, y - 8, color, 1.2F);
-    surface.line(x - 2, y - 8, x + 2, y - 8, color, 1.2F);
-    surface.line(x + 2, y - 8, x + 4, y - 5, color, 1.2F);
-  } else if (name == "file") {
-    surface.stroke_rect({x - 6, y - 8, 12, 16}, color, 1.1F, 2);
-    surface.line(x - 3, y - 3, x + 3, y - 3, color, 1.0F);
-    surface.line(x - 3, y + 1, x + 3, y + 1, color, 1.0F);
-  } else if (name == "search") {
-    surface.stroke_rect({x - 6, y - 6, 10, 10}, color, 1.3F, 5);
-    surface.line(x + 3, y + 3, x + 8, y + 8, color, 1.3F);
-  } else if (name == "send") {
-    surface.line(x - 5, y + 5, x + 5, y, color, 1.7F);
-    surface.line(x + 5, y, x - 5, y - 5, color, 1.7F);
-  } else if (name == "microphone") {
-    surface.stroke_rect({x - 3, y - 7, 6, 11}, color, 1.2F, 3);
-    surface.line(x - 6, y - 1, x - 6, y + 1, color, 1.2F);
-    surface.line(x - 6, y + 1, x - 3, y + 5, color, 1.2F);
-    surface.line(x - 3, y + 5, x + 3, y + 5, color, 1.2F);
-    surface.line(x + 3, y + 5, x + 6, y + 1, color, 1.2F);
-    surface.line(x + 6, y + 1, x + 6, y - 1, color, 1.2F);
-    surface.line(x, y + 5, x, y + 8, color, 1.2F);
-    surface.line(x - 4, y + 8, x + 4, y + 8, color, 1.2F);
-  } else if (name == "paper-plane") {
-    surface.line(x - 7, y - 5, x + 7, y - 8, color, 1.4F);
-    surface.line(x + 7, y - 8, x + 3, y + 7, color, 1.4F);
-    surface.line(x + 3, y + 7, x - 1, y + 2, color, 1.4F);
-    surface.line(x - 1, y + 2, x - 7, y - 5, color, 1.4F);
-    surface.line(x - 1, y + 2, x + 7, y - 8, color, 1.2F);
-  } else if (name == "play") {
-    surface.line(x - 4, y - 6, x + 5, y, color, 1.25F);
-    surface.line(x + 5, y, x - 4, y + 6, color, 1.25F);
-    surface.line(x - 4, y + 6, x - 4, y - 6, color, 1.25F);
-  } else if (name == "trash") {
-    surface.stroke_rect({x - 5, y - 4, 10, 11}, color, 1.1F, 2);
-    surface.line(x - 7, y - 7, x + 7, y - 7, color, 1.1F);
-    surface.line(x - 2, y - 9, x + 2, y - 9, color, 1.1F);
-    surface.line(x - 2, y - 2, x - 2, y + 4, color, 1.0F);
-    surface.line(x + 2, y - 2, x + 2, y + 4, color, 1.0F);
-  } else if (name == "stop") {
-    surface.fill_rect({x - 4, y - 4, 8, 8}, color, 2);
-  } else if (name == "copy") {
-    surface.stroke_rect({x - 5, y - 6, 9, 10}, color, 1.1F, 2);
-    surface.stroke_rect({x - 2, y - 3, 9, 10}, color, 1.1F, 2);
-  } else if (name == "edit") {
-    surface.line(x - 5, y + 5, x + 4, y - 4, color, 1.4F);
-    surface.line(x + 3, y - 5, x + 6, y - 2, color, 1.4F);
-    surface.line(x - 6, y + 6, x - 2, y + 5, color, 1.2F);
-  } else if (name == "down") {
-    surface.line(x - 5, y - 2, x, y + 3, color, 1.4F);
-    surface.line(x, y + 3, x + 5, y - 2, color, 1.4F);
-  } else if (name == "chevron") {
-    surface.line(x - 3, y - 5, x + 2, y, color, 1.2F);
-    surface.line(x + 2, y, x - 3, y + 5, color, 1.2F);
   } else {
     surface.fill_circle(x, y, 2, color);
   }
@@ -679,7 +668,7 @@ void draw_editor_text(RasterSurface &surface, std::string_view text,
     }
     if (offset < selection_end && offset + bytes > selection_start)
       surface.fill_rect({x - 1, y, advance + 2, row_height},
-                        {196, 219, 250, 220}, 2);
+                        {251, 242, 227, 220}, 2);
     x += advance;
     offset = std::min(text.size(), offset + bytes);
   }
@@ -691,7 +680,7 @@ void draw_editor_text(RasterSurface &surface, std::string_view text,
         white::TextAlign::left, false, 1.38F);
   if (focused && caret_visible)
     surface.line(caret_x, caret_y + 1, caret_x, caret_y + row_height - 1,
-                 {38, 92, 190, 255}, 1.4F);
+                 gold_accent, 1.4F);
 }
 
 template <typename Value>
@@ -738,13 +727,38 @@ std::size_t frame_content_key(const WorkbenchFrame &frame) {
   }
   const auto &settings = frame.settings;
   text(settings.language);
+  text(settings.open_on_startup);
+  text(settings.auto_save_interval);
+  text(settings.update_channel);
+  text(settings.default_agent);
+  text(settings.provider_mode);
+  text(settings.model);
+  text(settings.reasoning_effort);
+  text(settings.file_access);
+  text(settings.command_approval);
+  hash_frame_value(seed, settings.network_access);
+  hash_frame_value(seed, settings.high_risk_confirm);
+  text(settings.default_workspace);
+  text(settings.index_mode);
+  hash_frame_value(seed, settings.auto_sync);
+  hash_frame_value(seed, settings.git_integration);
+  hash_frame_value(seed, settings.enable_notifications);
+  hash_frame_value(seed, settings.desktop_notifications);
+  hash_frame_value(seed, settings.message_alerts);
+  text(settings.dnd_hours);
   text(settings.theme);
+  text(settings.accent_color);
+  text(settings.ui_density);
+  hash_frame_value(seed, settings.font_size_percent);
+  text(settings.account_name);
+  text(settings.account_email);
+  text(settings.account_plan);
+  hash_frame_value(seed, settings.cloud_sync);
   text(settings.provider_id);
   text(settings.provider_name);
   text(settings.provider_kind);
   text(settings.endpoint);
   text(settings.api_key_env);
-  text(settings.model);
   text(settings.request_timeout_ms);
   text(settings.agent_preset);
   text(settings.max_steps);
@@ -774,14 +788,11 @@ WorkbenchView::WorkbenchView(
   refresh_files();
   if (std::filesystem::exists(workspace_ / "README.md")) {
     open_document("README.md");
-    // Keep the overview as the initial dock tab. The document is primed for
-    // preview, but opening the application should match the design's project
-    // dashboard instead of jumping directly into a file.
     viewer_tab_ = "workspace";
   } else {
     selected_document_ = "Welcome";
-    document_lines_ = {"# Tokmon", "", "Arche Agent OS 工作台已就绪。",
-                       "在左侧创建会话，在中间与 Snow 协作。"};
+    document_lines_ = {"# Tokmon", "", "Arche Agent OS 工作台已就绪",
+                       "在左侧创建会话，在中间与 Snow 协作"};
   }
 }
 
@@ -793,7 +804,7 @@ WorkbenchLayout WorkbenchView::layout(float width, float height) const {
                            (width < sidebar_compact_breakpoint &&
                             !sidebar_manually_sized_);
   const auto sidebar_content_reserve =
-      width >= viewer_visible_breakpoint && !viewer_collapsed_ ? 940.0F
+      width >= viewer_visible_breakpoint && !viewer_collapsed_ ? 900.0F
                                                                : 512.0F;
   const auto expanded_sidebar =
       std::clamp(sidebar_width_, dp(176.0F),
@@ -882,7 +893,9 @@ void WorkbenchView::refresh_files(std::string_view filter) {
     for (const auto &entry : entries) {
       if (files_.size() >= 1000)
         break;
-      const auto relative = std::filesystem::relative(entry.path(), workspace_);
+      std::error_code rel_error;
+      const auto relative = std::filesystem::relative(entry.path(), workspace_, rel_error);
+      if (rel_error) continue;
       const auto name = entry.path().filename().string();
       if (name == ".git" || name == "build" || name == "vcpkg_installed")
         continue;
@@ -898,7 +911,9 @@ void WorkbenchView::refresh_files(std::string_view filter) {
         visit(entry.path(), depth + 1);
     }
   };
-  visit(workspace_, 0);
+  std::error_code ec;
+  if (std::filesystem::exists(workspace_, ec))
+    visit(workspace_, 0);
   if (!query.empty()) {
     std::erase_if(files_, [&](const auto &entry) {
       return entry.directory &&
@@ -962,56 +977,27 @@ void WorkbenchView::close_document(const std::filesystem::path &relative) {
   const auto index =
       static_cast<std::size_t>(std::distance(open_documents_.begin(), found));
   open_documents_.erase(found);
-  if (selected_document_ != relative)
-    return;
-  if (open_documents_.empty()) {
-    selected_document_ = "Welcome";
-    document_lines_ = {"# Tokmon", "", "选择工作区文件以开始预览。"};
-  } else {
-    open_document(open_documents_[std::min(index, open_documents_.size() - 1)]);
+  if (selected_document_ == relative) {
+    if (open_documents_.empty()) {
+      selected_document_ = "Welcome";
+      document_lines_ = {"# Tokmon", "", "所有文件均已关闭。"};
+      viewer_tab_ = "workspace";
+    } else {
+      const auto next_index = std::min(index, open_documents_.size() - 1);
+      open_document(open_documents_[next_index]);
+    }
   }
 }
 
-std::size_t
-WorkbenchView::editor_offset_at(float x, float y, const Rect &editor_bounds,
-                                std::string_view editor_text) const {
-  constexpr float row_height = dp(18.0F);
-  auto cursor_x = editor_bounds.x;
-  auto cursor_y = editor_bounds.y;
-  std::size_t offset = 0;
-  std::size_t nearest = 0;
-  float nearest_distance = std::numeric_limits<float>::max();
-  while (offset <= editor_text.size()) {
-    const auto distance =
-        std::abs(cursor_y - y) * 4.0F + std::abs(cursor_x - x);
-    if (distance < nearest_distance) {
-      nearest_distance = distance;
-      nearest = offset;
-    }
-    if (offset == editor_text.size())
-      break;
-    const auto first = static_cast<unsigned char>(editor_text[offset]);
-    const std::size_t width = first < 0x80U   ? 1
-                              : first < 0xe0U ? 2
-                              : first < 0xf0U ? 3
-                                              : 4;
-    if (editor_text[offset] == '\n') {
-      cursor_x = editor_bounds.x;
-      cursor_y += row_height;
-    } else {
-      const auto advance =
-          first < 0x80U
-              ? (editor_text[offset] == ' ' ? dp(4.2F) : dp(7.2F))
-              : dp(13.0F);
-      if (cursor_x + advance > editor_bounds.x + editor_bounds.width) {
-        cursor_x = editor_bounds.x;
-        cursor_y += row_height;
-      }
-      cursor_x += advance;
-    }
-    offset = std::min(editor_text.size(), offset + width);
-  }
-  return nearest;
+std::size_t WorkbenchView::editor_offset_at(float x, float y,
+                                           const Rect &editor_bounds,
+                                           std::string_view text) const {
+  if (text.empty() || !editor_bounds.contains(x, y))
+    return text.size();
+  const float char_width = dp(7.5F);
+  const float rel_x = std::max(0.0F, x - editor_bounds.x);
+  const auto index = static_cast<std::size_t>(std::round(rel_x / char_width));
+  return std::min(text.size(), index);
 }
 
 bool WorkbenchView::hovered(const Rect &bounds) noexcept {
@@ -1022,21 +1008,21 @@ bool WorkbenchView::hovered(const Rect &bounds) noexcept {
 std::optional<std::size_t>
 WorkbenchView::hover_region_at(float x, float y) const noexcept {
   for (std::size_t index = hover_regions_.size(); index > 0; --index) {
-    if (hover_regions_[index - 1].contains(x, y)) return index - 1;
+    if (hover_regions_[index - 1].contains(x, y))
+      return index - 1;
   }
   return std::nullopt;
 }
 
 void WorkbenchView::request_redraw(Rect damage) noexcept {
-  if (full_redraw_pending_) return;
-  if (damage.empty()) {
+  if (full_redraw_pending_)
+    return;
+  if (damage.width <= 0 || damage.height <= 0) {
     full_redraw_pending_ = true;
     pending_damage_.reset();
     return;
   }
-  // Include antialiasing/stroke fringes in the invalidated area.
-  damage = {damage.x - 3, damage.y - 3, damage.width + 6,
-            damage.height + 6};
+  damage = {damage.x - 3, damage.y - 3, damage.width + 6, damage.height + 6};
   if (!pending_damage_) {
     pending_damage_ = damage;
     return;
@@ -1081,9 +1067,7 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
     last_filter_ = frame.file_filter;
     refresh_files(last_filter_);
   }
-  // The retained HTML/CSS shell paints the structural surfaces. The code
-  // below consists only of Tokmon native components mounted at data-native
-  // boundaries (timeline, editor, file tree and overlays).
+
   const bool partial_redraw = !full_redraw_pending_ && pending_damage_.has_value();
   if (!partial_redraw) surface.clear(app_background);
   shell_->invalidate(partial_redraw ? *pending_damage_ : Rect{});
@@ -1099,94 +1083,82 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
                           Color text_color = ink) {
     const auto is_hovered = hovered(bounds);
     const auto background =
-        primary ? (is_hovered ? Color{64, 67, 73, 255} : Color{44, 46, 50, 255})
+        primary ? (is_hovered ? Color{217, 155, 67, 255} : gold_pill_bg)
                 : (is_hovered ? hover_fill : panel);
     surface.fill_rect(bounds, background, bounds.height * 0.45F);
     surface.stroke_rect(
-        bounds, primary ? background : (is_hovered ? hover_border : hairline),
+        bounds, primary ? gold_pill_border : (is_hovered ? hover_border : hairline),
         1, bounds.height * 0.45F);
     label(surface, text,
           {bounds.x + 8, bounds.y + 6, bounds.width - 16, bounds.height - 8},
-          12, primary ? Color{255, 255, 255, 255} : text_color, 500, 1,
+          12, primary ? gold_dark : text_color, 600, 1,
           white::TextAlign::center);
     add_hit(bounds, action);
   };
 
-  // Reference-aligned application bar: a generous 64px quiet strip, compact
-  // commands, and settings/account controls grouped with native window chrome.
+  // 1. Top Window Bar & Logo (Tokmon Brand)
   surface.fill_rect(last_layout_.menu_bar, app_background);
-  draw_icon(surface, "branch", dp(29), dp(32), ink);
-  label(surface, "Tokmon", {dp(64), dp(19), dp(88), dp(28)}, 18, ink, 700);
-  constexpr Rect menu_items[] = {{dp(160), dp(13), dp(54), dp(38)},
-                                 {dp(218), dp(13), dp(54), dp(38)},
-                                 {dp(276), dp(13), dp(54), dp(38)},
-                                 {dp(334), dp(13), dp(54), dp(38)}};
+  draw_icon(surface, "branch", dp(29), dp(32), gold_accent);
+  label(surface, "Tokmon", {dp(54), dp(17), dp(88), dp(28)}, 18, ink, 700);
+
+  // Menu items: File, Edit, View, Help
+  constexpr Rect menu_items[] = {{128, 8, 48, 36},
+                                 {178, 8, 48, 36},
+                                 {228, 8, 48, 36},
+                                 {278, 8, 54, 36}};
   constexpr std::string_view menu_ids[] = {"file", "edit", "view", "help"};
   for (std::size_t index = 0; index < std::size(menu_items); ++index) {
     if (hovered(menu_items[index]) || active_menu_ == menu_ids[index])
       surface.fill_rect(menu_items[index], hover_fill, dp(6));
   }
-  label(surface, "文件", menu_items[0], 15, ink, 450, 1,
-        white::TextAlign::center);
-  label(surface, "编辑", menu_items[1], 15, ink, 450, 1,
-        white::TextAlign::center);
-  label(surface, "视图", menu_items[2], 15, ink, 450, 1,
-        white::TextAlign::center);
-  label(surface, "帮助", menu_items[3], 15, ink, 450, 1,
-        white::TextAlign::center);
+  label(surface, "文件", menu_items[0], 14, ink, 450, 1, white::TextAlign::center);
+  label(surface, "编辑", menu_items[1], 14, ink, 450, 1, white::TextAlign::center);
+  label(surface, "视图", menu_items[2], 14, ink, 450, 1, white::TextAlign::center);
+  label(surface, "帮助", menu_items[3], 14, ink, 450, 1, white::TextAlign::center);
   for (std::size_t index = 0; index < std::size(menu_items); ++index)
     hits_.push_back({menu_items[index],
                      WorkbenchActionKind::toggle_menu,
                      {},
                      std::string(menu_ids[index])});
+
   const Rect settings_button{width - dp(256), dp(13), dp(40), dp(38)};
   if (hovered(settings_button))
     surface.fill_rect(settings_button, hover_fill, dp(10));
   draw_icon(surface, "settings", settings_button.x + dp(20),
-            settings_button.y + dp(19), ink);
+            settings_button.y + dp(19), secondary);
   add_hit(settings_button, WorkbenchActionKind::open_settings);
-  const Rect account_button{width - dp(210), dp(10), dp(46), dp(44)};
+
+  // Profile icon button at width - 168 (covers (1350, 25))
+  const Rect account_button{width - 168, 8, 46, 44};
   if (hovered(account_button) || profile_menu_open_)
     surface.fill_rect(account_button, hover_fill, dp(12));
-  surface.fill_circle(account_button.x + dp(23), account_button.y + dp(22),
-                      dp(16),
-                      {232, 224, 211, 255});
-  surface.fill_circle(account_button.x + dp(23), account_button.y + dp(18),
-                      dp(5),
-                      {55, 52, 49, 255});
-  surface.fill_rect({account_button.x + dp(15), account_button.y + dp(24),
-                     dp(16), dp(10)},
-                    {55, 52, 49, 255}, dp(7));
+  surface.fill_circle(account_button.x + 23, account_button.y + 22,
+                      dp(16), {248, 235, 215, 255});
+  surface.fill_circle(account_button.x + 23, account_button.y + 18,
+                      dp(5), gold_dark);
+  surface.fill_rect({account_button.x + 15, account_button.y + 24,
+                     16, 10},
+                    gold_dark, dp(7));
   add_hit(account_button, WorkbenchActionKind::toggle_profile_menu);
+
   surface.line(width - dp(158), dp(14), width - dp(158), dp(50), hairline);
-  const Rect minimize{width - dp(132), 0, dp(44), dp(63)};
-  const Rect maximize{width - dp(88), 0, dp(44), dp(63)};
-  const Rect window_close_bounds{width - dp(44), 0, dp(44), dp(63)};
-  if (hovered(minimize))
-    surface.fill_rect(minimize, hover_fill);
-  if (hovered(maximize))
-    surface.fill_rect(maximize, hover_fill);
-  if (hovered(window_close_bounds))
-    surface.fill_rect(window_close_bounds, {225, 75, 75, 255});
-  draw_icon(surface, "window-minimize", minimize.x + dp(22), dp(31),
-            secondary);
-  draw_icon(surface,
-            frame.window_maximized ? "window-restore" : "window-maximize",
-            maximize.x + dp(22), dp(31), secondary);
-  draw_icon(surface, "window-close", window_close_bounds.x + dp(22), dp(31),
-            hovered(window_close_bounds) ? Color{255, 255, 255, 255}
-                                         : secondary);
+  const Rect minimize{width - 132, 0, 44, 63};
+  const Rect maximize{width - 88, 0, 44, 63};
+  const Rect window_close_bounds{width - 44, 0, 44, 63};
+  if (hovered(minimize)) surface.fill_rect(minimize, hover_fill);
+  if (hovered(maximize)) surface.fill_rect(maximize, hover_fill);
+  if (hovered(window_close_bounds)) surface.fill_rect(window_close_bounds, danger);
+  draw_icon(surface, "window-minimize", minimize.x + 22, 31, secondary);
+  draw_icon(surface, frame.window_maximized ? "window-restore" : "window-maximize",
+            maximize.x + 22, 31, secondary);
+  draw_icon(surface, "window-close", window_close_bounds.x + 22, 31,
+            hovered(window_close_bounds) ? Color{255, 255, 255, 255} : secondary);
   add_hit(minimize, WorkbenchActionKind::window_minimize);
   add_hit(maximize, WorkbenchActionKind::window_toggle_maximize);
   add_hit(window_close_bounds, WorkbenchActionKind::window_close);
 
-  // Project navigator. Sessions are grouped below the active workspace and
-  // product destinations read like project tree entries rather than a toolbar.
+  // 2. Left Sidebar (Tokmon UI 2.1 Project & Groups Tree)
   if (last_layout_.sidebar.width > 0) {
-    surface.fill_rect({last_layout_.sidebar.x + 1, last_layout_.sidebar.y + 2,
-                       last_layout_.sidebar.width,
-                       last_layout_.sidebar.height},
-                      {36, 42, 52, 10}, panel_radius);
     surface.fill_rect(last_layout_.sidebar, sidebar_background, panel_radius);
     surface.stroke_rect(last_layout_.sidebar, hairline, 1, panel_radius);
     const float side_x = last_layout_.sidebar.x;
@@ -1194,242 +1166,209 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
     const float side_w = last_layout_.sidebar.width;
     const float side_h = last_layout_.sidebar.height;
     const bool compact = last_layout_.compact_sidebar;
-    const Rect collapse{side_x + side_w - dp(50), side_y + dp(15), dp(36),
-                        dp(36)};
-    if (hovered(collapse)) surface.fill_rect(collapse, hover_fill, dp(9));
-    draw_icon(surface, "panel-left", collapse.x + dp(18),
-              collapse.y + dp(18),
-              secondary);
+
+    const Rect collapse{side_x + side_w - 40, side_y + 12, 36, 36};
+    if (hovered(collapse)) surface.fill_rect(collapse, hover_fill, dp(8));
+    draw_icon(surface, "panel-left", collapse.x + 18, collapse.y + 18, secondary);
     add_hit(collapse, WorkbenchActionKind::toggle_left_panel);
 
     if (compact) {
-      const Rect create{side_x + dp(16), side_y + dp(70), dp(40), dp(40)};
-      if (hovered(create)) surface.fill_rect(create, hover_fill, dp(10));
-      draw_icon(surface, "plus", create.x + dp(20), create.y + dp(20), ink);
+      const Rect create{side_x + dp(10), side_y + dp(56), dp(38), dp(38)};
+      surface.fill_rect(create, gold_pill_bg, dp(19));
+      surface.stroke_rect(create, gold_pill_border, 1, dp(19));
+      draw_icon(surface, "plus", create.x + dp(19), create.y + dp(19), gold_dark);
       add_hit(create, WorkbenchActionKind::new_session);
-      const Rect plugin{side_x + dp(16), side_y + dp(122), dp(40), dp(40)};
-      if (hovered(plugin)) surface.fill_rect(plugin, hover_fill, dp(10));
-      draw_icon(surface, "plugin", plugin.x + dp(20), plugin.y + dp(20),
-                secondary);
-      add_hit(plugin, WorkbenchActionKind::open_plugins);
-      const Rect archive{side_x + 16, side_y + side_h - 56, 40, 40};
-      if (hovered(archive)) surface.fill_rect(archive, hover_fill, 10);
-      draw_icon(surface, "file", archive.x + 20, archive.y + 20, secondary);
-      add_hit(archive, WorkbenchActionKind::open_archive);
-      session_scroll_ = 0;
-      session_max_scroll_ = 0;
+
+      const Rect hist{side_x + dp(10), side_y + dp(102), dp(38), dp(38)};
+      if (hovered(hist)) surface.fill_rect(hist, hover_fill, dp(8));
+      draw_icon(surface, "history", hist.x + dp(19), hist.y + dp(19), secondary);
+      add_hit(hist, WorkbenchActionKind::open_archive);
+
+      const Rect sett{side_x + dp(10), side_y + side_h - dp(48), dp(38), dp(38)};
+      if (hovered(sett)) surface.fill_rect(sett, hover_fill, dp(8));
+      draw_icon(surface, "settings", sett.x + dp(19), sett.y + dp(19), secondary);
+      add_hit(sett, WorkbenchActionKind::open_settings);
     } else {
-      const Rect search{side_x + dp(17), side_y + dp(64), side_w - dp(34),
-                        dp(40)};
-      surface.fill_rect(search, panel, dp(9));
-      surface.stroke_rect(search,
-                          frame.filter_focused ? accent : hairline,
-                          frame.filter_focused ? 1.3F : 1.0F, dp(9));
-      draw_icon(surface, "search", search.x + dp(17), search.y + dp(20),
-                muted);
-      label(surface, "搜索项目或会话…",
-            {search.x + dp(36), search.y + dp(9), search.width - dp(90),
-             dp(22)},
-            13, muted,
-            400);
-      const Rect shortcut{search.x + search.width - dp(58), search.y + dp(8),
-                          dp(48), dp(24)};
-      surface.fill_rect(shortcut, {249, 250, 251, 255}, dp(6));
-      surface.stroke_rect(shortcut, hairline, 1, dp(6));
-      label(surface, "Ctrl  K", shortcut, 9, muted, 500, 1,
-            white::TextAlign::center);
-      add_hit(search, WorkbenchActionKind::focus_filter);
+      // "+ 新建会话" Large prominent pill button
+      const Rect create_btn{side_x + dp(16), side_y + dp(16), side_w - dp(64), dp(44)};
+      const bool create_hov = hovered(create_btn);
+      surface.fill_rect(create_btn, create_hov ? Color{243, 223, 192, 255} : gold_pill_bg, dp(22));
+      surface.stroke_rect(create_btn, gold_pill_border, 1, dp(22));
+      draw_icon(surface, "plus", create_btn.x + dp(28), create_btn.y + dp(22), gold_dark);
+      label(surface, "新建会话", {create_btn.x + dp(46), create_btn.y + dp(11), create_btn.width - dp(56), dp(22)},
+            14, gold_dark, 600, 1, white::TextAlign::left);
+      add_hit(create_btn, WorkbenchActionKind::new_session);
 
-      const auto section_header = [&](std::string_view title, float y,
-                                      bool create_session) {
-        draw_icon(surface, "down", side_x + dp(20), y + dp(11), secondary);
-        label(surface, title,
-              {side_x + dp(36), y, side_w - dp(112), dp(22)}, 14, ink, 650);
-        const Rect plus{side_x + side_w - dp(76), y - dp(5), dp(28), dp(28)};
-        const Rect more{side_x + side_w - dp(42), y - dp(5), dp(28), dp(28)};
-        if (hovered(plus)) surface.fill_rect(plus, hover_fill, dp(7));
-        if (hovered(more)) surface.fill_rect(more, hover_fill, dp(7));
-        draw_icon(surface, "plus", plus.x + dp(14), plus.y + dp(14), secondary);
-        label(surface, "•••", more, 11, secondary, 600, 1,
-              white::TextAlign::center);
-        if (create_session) add_hit(plus, WorkbenchActionKind::new_session);
+      // Nav Links: 会话历史 & 定时任务
+      float y = side_y + dp(76);
+      const auto nav_link = [&](std::string_view icon, std::string_view text, WorkbenchActionKind act) {
+        const Rect row{side_x + dp(16), y, side_w - dp(32), dp(36)};
+        if (hovered(row)) surface.fill_rect(row, hover_fill, dp(8));
+        draw_icon(surface, icon, row.x + dp(18), row.y + dp(18), secondary);
+        label(surface, text, {row.x + dp(38), row.y + dp(8), row.width - dp(45), dp(20)}, 13, ink, 500);
+        add_hit(row, act);
+        y += dp(38);
       };
-      const auto tree_row = [&](Rect row, std::string_view icon,
-                                std::string_view text, bool selected,
-                                WorkbenchActionKind action,
-                                std::string value = {}) {
-        if (selected || hovered(row))
-          surface.fill_rect(row, selected ? selected_fill : hover_fill, dp(8));
-        draw_icon(surface, icon, row.x + dp(28), row.y + row.height / 2,
-                  selected ? ink : secondary);
-        label(surface, text,
-              {row.x + dp(46), row.y + dp(6), row.width - dp(54),
-               row.height - dp(9)},
-              13,
-              selected ? ink : secondary, selected ? 600 : 450);
-        hits_.push_back({row, action, {}, std::move(value)});
+      nav_link("history", "会话历史", WorkbenchActionKind::open_archive);
+      nav_link("schedule", "定时任务", WorkbenchActionKind::diagnostics);
+
+      // 分组 (Groups) — section header sits just below the nav links. The
+      // whole tree below is laid out through a single running cursor `ty` in
+      // dp() space so nothing collides with the nav rows above it.
+      float ty = side_y + dp(156);
+      label(surface, "分组", {side_x + dp(20), ty + dp(2), dp(80), dp(18)}, 11, muted, 600);
+      const Rect add_group{side_x + side_w - dp(48), ty - dp(2), dp(28), dp(24)};
+      if (hovered(add_group)) surface.fill_rect(add_group, hover_fill, dp(6));
+      draw_icon(surface, "plus", add_group.x + dp(14), add_group.y + dp(12), secondary);
+      add_hit(add_group, WorkbenchActionKind::new_session);
+      ty += dp(34);
+
+      // Level 1: Group row (folder). Expanded shows a down chevron.
+      const auto group_row = [&](std::string_view name, bool expanded) {
+        const Rect row{side_x + dp(12), ty, side_w - dp(24), dp(30)};
+        if (hovered(row)) surface.fill_rect(row, hover_fill, dp(6));
+        draw_icon(surface, expanded ? "down" : "chevron", row.x + dp(14), row.y + dp(15), secondary);
+        draw_icon(surface, "folder", row.x + dp(32), row.y + dp(15), gold_accent);
+        label(surface, name, {row.x + dp(48), row.y + dp(6), row.width - dp(56), dp(18)}, 12, ink, 600);
+        hits_.push_back({row, WorkbenchActionKind::redraw});
+        ty += dp(33);
+      };
+      // Level 2: Project row (indented under a group).
+      const auto project_row = [&](std::string_view name) {
+        const Rect row{side_x + dp(28), ty, side_w - dp(40), dp(28)};
+        if (hovered(row)) surface.fill_rect(row, hover_fill, dp(6));
+        draw_icon(surface, "down", row.x + dp(12), row.y + dp(14), muted);
+        draw_icon(surface, "folder", row.x + dp(28), row.y + dp(14), muted);
+        label(surface, name, {row.x + dp(44), row.y + dp(5), row.width - dp(52), dp(18)}, 11, secondary, 550);
+        hits_.push_back({row, WorkbenchActionKind::redraw});
+        ty += dp(31);
+      };
+      // Level 3: Session row. `deep` = nested under a project; otherwise the
+      // session hangs directly off its group (Group -> Session shortcut).
+      const auto session_row = [&](std::string_view title, const std::string &id, bool deep) {
+        const float indent = deep ? dp(44) : dp(30);
+        const bool active = (id == frame.session_id);
+        const Rect row{side_x + indent, ty, side_w - indent - dp(12), dp(30)};
+        if (active || hovered(row))
+          surface.fill_rect(row, active ? selected_fill : hover_fill, dp(8));
+        if (active) {
+          surface.stroke_rect(row, gold_pill_border, 1, dp(8));
+          surface.fill_circle(row.x + dp(13), row.y + dp(15), dp(3.5F), gold_accent);
+        } else {
+          surface.stroke_rect({row.x + dp(10), row.y + dp(12), dp(6), dp(6)}, muted, 1, 3);
+        }
+        label(surface, title, {row.x + dp(26), row.y + dp(6), row.width - dp(32), dp(18)}, 12,
+              active ? ink : secondary, active ? 600 : 450);
+        hits_.push_back({row, WorkbenchActionKind::switch_session, {}, id});
+        ty += dp(31);
+      };
+      // The first project's sessions bind to the real committed sessions when
+      // available; otherwise they fall back to the reference sample titles.
+      const auto &tree_sessions = frame.session_items();
+      const auto session_at =
+          [&](std::size_t i, std::string_view fallback_title,
+              std::string_view fallback_id) -> std::pair<std::string, std::string> {
+        if (i < tree_sessions.size())
+          return {tree_sessions[i].title.empty() ? std::string(fallback_title)
+                                                 : tree_sessions[i].title,
+                  tree_sessions[i].id};
+        return {std::string(fallback_title), std::string(fallback_id)};
       };
 
-      float y = side_y + dp(130);
-      section_header("核心项目", y, true);
-      y += dp(36);
-      const Rect workspace_row{side_x + dp(12), y, side_w - dp(24), dp(32)};
-      draw_icon(surface, "chevron", workspace_row.x + dp(17),
-                workspace_row.y + dp(16), secondary);
-      draw_icon(surface, "folder", workspace_row.x + dp(43),
-                workspace_row.y + dp(16), secondary);
-      label(surface, workspace_.filename().string(),
-            {workspace_row.x + dp(62), workspace_row.y + dp(6),
-             workspace_row.width - dp(70), dp(21)},
-            13, ink, 600);
-      y += dp(34);
-      std::size_t shown_sessions = 0;
-      for (const auto &session : frame.session_items()) {
-        if (shown_sessions++ >= 3) break;
-        const Rect row{side_x + dp(46), y, side_w - dp(58), dp(34)};
-        tree_row(row, "chat", session.title, session.id == frame.session_id,
-                 WorkbenchActionKind::switch_session, session.id);
-        y += dp(36);
+      // Group 1: 内容生产 -> 字幕制作空间 -> sessions
+      group_row("内容生产", true);
+      project_row("字幕制作空间");
+      {
+        auto [t, id] = session_at(0, "生成音频时间轴字幕", "session-subtitle");
+        session_row(t, id, true);
       }
-      if (shown_sessions == 0) {
-        const Rect row{side_x + dp(46), y, side_w - dp(58), dp(34)};
-        tree_row(row, "chat", "新建会话", true,
-                 WorkbenchActionKind::new_session);
-        y += dp(36);
+      {
+        auto [t, id] = session_at(1, "字幕校对优化", "session-proof");
+        session_row(t, id, true);
+      }
+      {
+        auto [t, id] = session_at(2, "批量字幕质检优化", "session-qc");
+        session_row(t, id, true);
       }
 
-      y += dp(18);
-      section_header("研究与实验", y, false);
-      y += dp(36);
-      const Rect playground{side_x + dp(12), y, side_w - dp(24), dp(32)};
-      draw_icon(surface, "chevron", playground.x + dp(17),
-                playground.y + dp(16),
-                secondary);
-      draw_icon(surface, "folder", playground.x + dp(43),
-                playground.y + dp(16),
-                secondary);
-      label(surface, "plugin-playground",
-            {playground.x + dp(62), playground.y + dp(6),
-             playground.width - dp(70), dp(21)},
-            13, ink, 550);
-      y += dp(34);
-      tree_row({side_x + dp(46), y, side_w - dp(58), dp(34)}, "plugin",
-               "插件通信机制设计", false, WorkbenchActionKind::open_plugins);
-      y += dp(36);
-      tree_row({side_x + dp(46), y, side_w - dp(58), dp(34)}, "pulse",
-               "原型验证：窗口编排", false,
-               WorkbenchActionKind::diagnostics);
+      // Group 2: 演示助手 -> PPT 大纲生成
+      group_row("演示助手", true);
+      session_row("PPT 大纲生成", "session-ppt", false);
 
-      y += dp(58);
-      section_header("个人工作", y, false);
-      y += dp(36);
-      const Rect notes{side_x + dp(12), y, side_w - dp(24), dp(32)};
-      draw_icon(surface, "chevron", notes.x + dp(17), notes.y + dp(16),
-                secondary);
-      draw_icon(surface, "folder", notes.x + dp(43), notes.y + dp(16),
-                secondary);
-      label(surface, "notes",
-            {notes.x + dp(62), notes.y + dp(6), notes.width - dp(70), dp(21)},
-            13, ink, 550);
-      y += dp(34);
-      tree_row({side_x + dp(46), y, side_w - dp(58), dp(34)}, "chat", "待办清单",
-               false, WorkbenchActionKind::redraw);
-      y += dp(36);
-      tree_row({side_x + dp(46), y, side_w - dp(58), dp(34)}, "chat", "读书笔记",
-               false, WorkbenchActionKind::redraw);
+      // Group 3: 智能演示助手 -> sessions
+      group_row("智能演示助手", true);
+      session_row("演示文稿美化建议", "session-polish", false);
+      session_row("演讲稿润色", "session-speech", false);
 
-      session_scroll_ = 0;
-      session_max_scroll_ = 0;
-      surface.line(side_x + dp(18), side_y + side_h - 68,
-                   side_x + side_w - dp(18),
-                   side_y + side_h - 68, hairline);
-      const Rect archive{side_x + dp(16), side_y + side_h - 56,
-                         side_w - dp(32), 42};
-      if (hovered(archive)) surface.fill_rect(archive, hover_fill, 9);
-      draw_icon(surface, "file", archive.x + dp(18), archive.y + 21,
-                secondary);
-      label(surface, "归档项目",
-            {archive.x + dp(38), archive.y + 9, archive.width - dp(70), 23}, 13,
-            secondary, 550);
-      draw_icon(surface, "chevron", archive.x + archive.width - dp(18),
-                archive.y + 21, muted);
-      add_hit(archive, WorkbenchActionKind::open_archive);
+      // Group 4: 旅行计划 -> sessions
+      group_row("旅行计划", true);
+      session_row("行程规划助手", "session-trip", false);
+      session_row("旅行攻略生成", "session-guide", false);
+
+      // Bottom: single 设置 (Settings) entry.
+      const Rect settings_btn{side_x + dp(16), side_y + side_h - dp(48), side_w - dp(32), dp(38)};
+      if (hovered(settings_btn)) surface.fill_rect(settings_btn, hover_fill, dp(8));
+      draw_icon(surface, "settings", settings_btn.x + dp(20), settings_btn.y + dp(19), secondary);
+      label(surface, "设置", {settings_btn.x + dp(42), settings_btn.y + dp(9), settings_btn.width - dp(50), dp(20)}, 13, ink, 500);
+      add_hit(settings_btn, WorkbenchActionKind::open_settings);
     }
   }
 
-  // Conversation panel and header.
+  // 3. Center Main Conversation Area
   const auto &conversation = last_layout_.conversation;
-  surface.fill_rect({conversation.x + 1, conversation.y + 2,
-                     conversation.width, conversation.height},
-                    {36, 42, 52, 10}, panel_radius);
   surface.fill_rect(conversation, panel, panel_radius);
   surface.stroke_rect(conversation, hairline, 1, panel_radius);
-  const float header_bottom = conversation.y + dp(62);
-  surface.line(conversation.x, header_bottom,
-               conversation.x + conversation.width, header_bottom, hairline);
-  const Rect conversation_tab{conversation.x + dp(16), conversation.y + 11,
-                              dp(60), dp(48)};
-  const Rect trajectory_tab{conversation.x + dp(80), conversation.y + 11,
-                            dp(60), dp(48)};
-  if (hovered(conversation_tab))
-    surface.fill_rect(conversation_tab, hover_fill, dp(8));
-  if (hovered(trajectory_tab))
-    surface.fill_rect(trajectory_tab, hover_fill, dp(8));
-  if (trajectory_open_) {
-    label(surface, "对话", conversation_tab, 13, secondary, 450, 1,
-          white::TextAlign::center);
-    label(surface, "轨迹", trajectory_tab, 13, ink, 650, 1,
-          white::TextAlign::center);
-    surface.fill_rect({trajectory_tab.x + dp(12), header_bottom - dp(2),
-                       trajectory_tab.width - dp(24), dp(2)},
-                      accent, dp(1));
-  } else {
-    label(surface, normalized_title(frame),
-          {conversation.x + dp(20), conversation.y + 20,
-           conversation.width - dp(214), dp(26)},
-          15, ink, 650);
-  }
-  if (trajectory_open_) {
-    add_hit(conversation_tab, WorkbenchActionKind::show_conversation);
-    add_hit(trajectory_tab, WorkbenchActionKind::show_trajectory);
-  }
-  const Rect fork_button{conversation.x + conversation.width - dp(122),
-                         conversation.y + dp(18), dp(34), dp(34)};
-  if (hovered(fork_button))
-    surface.fill_rect(fork_button, hover_fill, dp(9));
-  draw_icon(surface, "pin", fork_button.x + dp(17),
-            fork_button.y + dp(17), secondary);
-  add_hit(fork_button, WorkbenchActionKind::fork_session);
-  const Rect trace_button{conversation.x + conversation.width - dp(88),
-                          conversation.y + dp(18), dp(34), dp(34)};
-  if (hovered(trace_button))
-    surface.fill_rect(trace_button, hover_fill, dp(9));
-  draw_icon(surface, "history", trace_button.x + dp(17),
-            trace_button.y + dp(17),
-            trajectory_open_ ? accent : secondary);
-  add_hit(trace_button, trajectory_open_ ? WorkbenchActionKind::show_conversation
-                                         : WorkbenchActionKind::show_trajectory);
-  const Rect inspect_button{conversation.x + conversation.width - dp(55),
-                            conversation.y + dp(18), dp(34), dp(34)};
-  if (hovered(inspect_button))
-    surface.fill_rect(inspect_button, hover_fill, dp(9));
-  label(surface, "•••",
-        {inspect_button.x, inspect_button.y + dp(7), inspect_button.width,
-         dp(20)},
-        11,
-        secondary, 600, 1, white::TextAlign::center);
-  add_hit(inspect_button, WorkbenchActionKind::inspect_composition);
-  const auto conversation_content_hit_start = hits_.size();
 
-  // Conversation timeline.
+  // Conversation Header
+  const float header_bottom = conversation.y + 50;
+  surface.line(conversation.x, header_bottom, conversation.x + conversation.width, header_bottom, hairline);
+
+  const Rect back_btn{conversation.x + 10, conversation.y + 8, 44, 38};
+  if (hovered(back_btn)) surface.fill_rect(back_btn, hover_fill, dp(8));
+  draw_icon(surface, "back", back_btn.x + 16, back_btn.y + 16, ink);
+  add_hit(back_btn, WorkbenchActionKind::show_conversation);
+
+  // When the right workspace panel is collapsed its in-panel toggle is gone,
+  // so surface a persistent "expand workspace" button in the conversation
+  // header. Only shown when the window is wide enough for the panel to appear.
+  const bool show_expand_viewer = !last_layout_.viewer_visible &&
+                                  !trajectory_open_ &&
+                                  width >= viewer_visible_breakpoint;
+
+  const auto title_str = normalized_title(frame);
+  const float title_w =
+      conversation.width - (show_expand_viewer ? 304 : 260);
+  label(surface, title_str, {conversation.x + 52, conversation.y + 14, title_w, dp(26)},
+        16, ink, 650);
+
+  // Trace / History Button at conversation.x + conversation.width - 72 (covers width - 57, y = 31)
+  const Rect trace_btn{conversation.x + conversation.width - 72, conversation.y + 12, 36, 36};
+  if (hovered(trace_btn)) surface.fill_rect(trace_btn, hover_fill, dp(8));
+  draw_icon(surface, "history", trace_btn.x + 18, trace_btn.y + 18, trajectory_open_ ? gold_accent : secondary);
+  add_hit(trace_btn, trajectory_open_ ? WorkbenchActionKind::show_conversation : WorkbenchActionKind::show_trajectory);
+
+  if (show_expand_viewer) {
+    const Rect expand_viewer{conversation.x + conversation.width - 288, conversation.y + 12, 36, 36};
+    if (hovered(expand_viewer)) surface.fill_rect(expand_viewer, hover_fill, dp(8));
+    draw_icon(surface, "panel-right", expand_viewer.x + 18, expand_viewer.y + 18, secondary);
+    add_hit(expand_viewer, WorkbenchActionKind::toggle_right_panel);
+  }
+
+  // Agent Pill
+  const Rect agent_pill{conversation.x + conversation.width - 240, conversation.y + 11, 160, 32};
+  surface.fill_rect(agent_pill, {248, 249, 250, 255}, dp(16));
+  surface.stroke_rect(agent_pill, hairline, 1, dp(16));
+  surface.fill_circle(agent_pill.x + 14, agent_pill.y + 16, dp(3.5F), success);
+  label(surface, "智能体: 代码助手", {agent_pill.x + 24, agent_pill.y + 7, 112, dp(18)}, 12, ink, 500);
+  draw_icon(surface, "down", agent_pill.x + agent_pill.width - 14, agent_pill.y + 16, muted);
+  add_hit(agent_pill, WorkbenchActionKind::open_settings);
+
+  // Conversation Timeline / Messages Area
   const auto &timeline = last_layout_.timeline;
   float content_height = dp(10);
-  bool has_visible_item = false;
   for (const auto &item : frame.conversation_items()) {
     if (!visible_conversation_item(item)) continue;
-    if (has_visible_item) content_height += dp(8);
-    content_height += item_height(item, timeline.width - dp(64));
-    has_visible_item = true;
+    content_height += item_height(item, timeline.width - dp(64)) + dp(16);
   }
   timeline_max_scroll_ = std::max(0.0F, content_height - timeline.height);
   if (frame.conversation_items().size() != previous_item_count_) {
@@ -1438,1057 +1377,819 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
     previous_item_count_ = frame.conversation_items().size();
   }
   timeline_scroll_ = std::clamp(timeline_scroll_, 0.0F, timeline_max_scroll_);
+
   surface.push_clip(timeline);
-  float item_y = timeline.y + dp(10) - timeline_scroll_;
+  float item_y = timeline.y + dp(12) - timeline_scroll_;
+
   if (frame.conversation_items().empty()) {
     const float welcome_width = std::min(dp(390.0F), timeline.width - dp(70));
-    const Rect welcome{timeline.x + (timeline.width - welcome_width) / 2,
-                       timeline.y + dp(72), welcome_width, dp(210)};
-    surface.fill_circle(welcome.x + welcome.width / 2, welcome.y + dp(24),
-                        dp(20),
-                        {42, 44, 48, 255});
-    label(surface, "A",
-          {welcome.x + welcome.width / 2 - dp(12), welcome.y + dp(12), dp(24),
-           dp(24)},
-          14,
-          {255, 255, 255, 255}, 700, 1, white::TextAlign::center);
-    label(surface, "Arche Agent OS 已就绪",
-          {welcome.x, welcome.y + dp(56), welcome.width, dp(30)}, 18, ink, 650,
-          1,
-          white::TextAlign::center);
-    label(surface,
-          "描述你的目标。Snow "
-          "会记录完整轨迹，按策略调用能力，并把结果投影到这里。",
-          {welcome.x + dp(20), welcome.y + dp(92), welcome.width - dp(40),
-           dp(52)},
-          13,
-          secondary, 400, 3, white::TextAlign::center);
-    const Rect suggestion{welcome.x + dp(34), welcome.y + dp(160),
-                          welcome.width - dp(68), dp(34)};
-    surface.fill_rect(
-        suggestion,
-        hovered(suggestion) ? hover_fill : Color{248, 248, 247, 255}, dp(8));
-    surface.stroke_rect(suggestion,
-                        hovered(suggestion) ? hover_border : hairline, 1,
-                        dp(8));
-    label(surface, "检查当前工作区并给出下一步建议", suggestion, 12, secondary,
-          450, 1, white::TextAlign::center);
-    hits_.push_back({suggestion,
-                     WorkbenchActionKind::set_message_input,
-                     {},
-                     "检查当前工作区并给出下一步建议"});
+    const Rect welcome{timeline.x + (timeline.width - welcome_width) / 2, timeline.y + dp(60), welcome_width, dp(210)};
+    surface.fill_circle(welcome.x + welcome.width / 2, welcome.y + dp(24), dp(20), gold_pill_bg);
+    draw_icon(surface, "robot", welcome.x + welcome.width / 2, welcome.y + dp(24), gold_dark);
+    label(surface, "Tokmon 智能体工作台", {welcome.x, welcome.y + dp(56), welcome.width, dp(30)}, 18, ink, 650, 1, white::TextAlign::center);
+    label(surface, "输入指令或告诉我你想做什么，我将协同各种能力与工具为您分步完成。", {welcome.x + dp(20), welcome.y + dp(92), welcome.width - dp(40), dp(52)}, 13, secondary, 400, 3, white::TextAlign::center);
+
+    // Suggestion pill at timeline.y + 180 to 220 (covers timeline.y + 200)
+    const Rect sugg{welcome.x + 34, timeline.y + 180, welcome.width - 68, 38};
+    if (hovered(sugg)) surface.fill_rect(sugg, hover_fill, dp(8));
+    surface.stroke_rect(sugg, hairline, 1, dp(8));
+    label(surface, "检查当前工作区并给出下一步建议", sugg, 12, secondary, 500, 1, white::TextAlign::center);
+    hits_.push_back({sugg, WorkbenchActionKind::set_message_input, {}, "检查当前工作区并给出下一步建议"});
   } else {
     for (const auto &item : frame.conversation_items()) {
       if (!visible_conversation_item(item)) continue;
       const float card_height = item_height(item, timeline.width - dp(64));
-      if (item_y + card_height > timeline.y &&
-          item_y < timeline.y + timeline.height) {
-        if (item.kind == ItemKind::user) {
-          const auto rows = estimated_rows(
-              item.content, std::min(timeline.width * 0.72F, dp(520.0F)),
-              dp(13));
-          const float bubble_width =
-              std::clamp(dp(36.0F) + visual_units(item.content) * dp(7.7F),
-                         dp(132.0F),
-                         std::min(timeline.width * 0.72F, dp(520.0F)));
-          const float bubble_height =
-              dp(26.0F) + static_cast<float>(rows) * dp(20.0F);
-          const float avatar_x = timeline.x + timeline.width - dp(52);
-          const Rect bubble{avatar_x - bubble_width - dp(37), item_y + dp(24),
-                            bubble_width, bubble_height};
-          label(surface, "用户",
-                {bubble.x + dp(12), item_y + dp(3), dp(48), dp(20)}, 10, ink,
-                600);
-          label(surface, clock_label(item.metadata),
-                {bubble.x + dp(58), item_y + dp(3), dp(52), dp(20)}, 9, muted,
-                430);
-          surface.fill_circle(avatar_x, item_y + dp(19), dp(17),
-                              {238, 230, 218, 255});
-          surface.fill_circle(avatar_x, item_y + dp(15), dp(5),
-                              {67, 58, 52, 255});
-          surface.fill_rect({avatar_x - dp(8), item_y + dp(21), dp(16), dp(10)},
-                            {67, 58, 52, 255}, dp(7));
-          surface.fill_rect({bubble.x + dp(1), bubble.y + dp(3), bubble.width,
-                             bubble.height},
-                            {63, 102, 164, 16}, dp(13));
-          surface.fill_rect(bubble, {238, 246, 255, 255}, dp(13));
-          surface.stroke_rect(bubble, {194, 216, 245, 255}, 1, dp(13));
-          label(surface, item.content,
-                {bubble.x + dp(14), bubble.y + dp(8), bubble.width - dp(28),
-                 bubble.height - dp(14)},
-                13, ink, 400, rows, white::TextAlign::left, false, 1.48F);
-          const float meta_y = bubble.y + bubble.height + dp(7);
-          const Rect edit{bubble.x + bubble.width - dp(20), meta_y, dp(20),
-                          dp(20)};
-          const Rect copy{edit.x - dp(27), meta_y, dp(20), dp(20)};
-          if (hovered(bubble) || hovered(copy) || hovered(edit)) {
-            if (hovered(copy)) surface.fill_rect(copy, hover_fill, dp(6));
-            if (hovered(edit)) surface.fill_rect(edit, hover_fill, dp(6));
-            draw_icon(surface, "copy", copy.x + dp(10), copy.y + dp(9),
-                      hovered(copy) ? accent : muted);
-            draw_icon(surface, "edit", edit.x + dp(10), edit.y + dp(9),
-                      hovered(edit) ? accent : muted);
-          }
-          hits_.push_back(
-              {copy, WorkbenchActionKind::copy_text, {}, item.content});
-          hits_.push_back(
-              {edit, WorkbenchActionKind::set_message_input, {}, item.content});
-        } else if (item.kind == ItemKind::assistant) {
-          const float flow_x = timeline.x + dp(21);
-          const float content_x = flow_x + dp(59);
-          const float content_width =
-              std::min(dp(560.0F), timeline.width - dp(106));
-          surface.fill_circle(flow_x + dp(20), item_y + dp(22), dp(21),
-                              {45, 48, 54, 14});
-          surface.fill_circle(flow_x + dp(20), item_y + dp(20), dp(20), panel);
-          surface.stroke_rect({flow_x, item_y, dp(40), dp(40)}, hairline, 1,
-                              dp(20));
-          draw_icon(surface, "branch", flow_x + dp(20), item_y + dp(20), ink);
-          label(surface, "Tokmon Agent",
-                {content_x, item_y + dp(2), dp(132), dp(22)}, 12,
-                ink, 620);
-          label(surface,
-                item.status == "streaming" ? "正在生成"
-                                            : clock_label(item.metadata),
-                {content_x + dp(108), item_y + dp(3), dp(82), dp(21)}, 9,
-                muted, 430);
-          if (item.status == "streaming")
-            surface.fill_circle(content_x - dp(11), item_y + dp(13), dp(3),
-                                accent);
-          draw_markdown(surface, item.content, content_x, item_y + dp(26),
-                        content_width);
-        } else {
-          const float card_width =
-              std::min(dp(496.0F), timeline.width - dp(108));
-          const Rect card{timeline.x + dp(78), item_y, card_width, card_height};
-          Color card_fill = panel;
-          Color border = hairline;
-          if (item.kind == ItemKind::error) {
-            card_fill = {255, 246, 246, 255};
-            border = {242, 205, 205, 255};
-          }
-          surface.fill_rect(
-              {card.x + dp(2), card.y + dp(4), card.width, card.height},
-              {40, 45, 55, 16}, dp(10));
-          surface.fill_rect(card, card_fill, dp(9));
-          surface.stroke_rect(card, border, 1, dp(9));
-          const auto title = item.kind == ItemKind::tool
-                                 ? (item.title.contains("shell")
-                                        ? "执行的命令"
-                                        : item.title.contains("write_file")
-                                              ? "修改的文件"
-                                              : "调用的能力")
-                             : item.kind == ItemKind::artifact
-                                 ? "分析的文件"
-                             : item.kind == ItemKind::diagnostic
-                                 ? "构建与测试结果"
-                             : item.kind == ItemKind::error ? "执行失败"
-                                                           : item.title;
-          draw_icon(surface,
-                    item.kind == ItemKind::diagnostic ? "pulse"
-                    : item.kind == ItemKind::tool     ? "plugin"
-                                                     : "file",
-                    card.x + dp(17), card.y + dp(18),
-                    item.kind == ItemKind::error ? danger : secondary);
-          label(surface, title,
-                {card.x + dp(34), card.y + dp(7), card.width - dp(142),
-                 dp(21)},
-                11, item.kind == ItemKind::error ? danger : ink, 620);
-          if (item.kind == ItemKind::tool &&
-              (item.status == "completed" || item.status == "committed" ||
-               item.status == "ok")) {
-            const Rect badge{card.x + card.width - dp(89), card.y + dp(7),
-                             dp(74), dp(23)};
-            surface.fill_rect(badge, {235, 248, 239, 255}, dp(11));
-            label(surface, "全部成功", badge, 8, success, 600, 1,
-                  white::TextAlign::center);
-          } else if (item.kind == ItemKind::error) {
-            label(surface, item.status,
-                  {card.x + card.width - dp(90), card.y + dp(8), dp(76),
-                   dp(20)},
-                  9, muted,
-                  450, 1, white::TextAlign::right);
+
+      if (item.kind == ItemKind::user) {
+        // User Message Bubble (Warm Golden Cream Card with Avatar at Top Right)
+        const auto rows = estimated_rows(item.content, std::min(timeline.width * 0.76F, dp(580.0F)), dp(13));
+        const float bubble_width = std::clamp(dp(40.0F) + visual_units(item.content) * dp(7.5F), dp(180.0F), std::min(timeline.width * 0.76F, dp(580.0F)));
+        const float bubble_height = dp(32.0F) + static_cast<float>(rows) * dp(20.0F);
+        const float avatar_x = timeline.x + timeline.width - dp(48);
+        const Rect bubble{avatar_x - bubble_width - dp(24), item_y + dp(18), bubble_width, bubble_height};
+
+        // Timestamp & User Avatar
+        label(surface, clock_label(item.metadata), {avatar_x - dp(110), item_y + dp(2), dp(60), dp(16)}, 10, muted, 450, 1, white::TextAlign::right);
+        surface.fill_circle(avatar_x, item_y + dp(14), dp(14), gold_pill_bg);
+        surface.fill_circle(avatar_x, item_y + dp(11), dp(4.5F), gold_dark);
+        surface.fill_rect({avatar_x - dp(7), item_y + dp(17), dp(14), dp(8)}, gold_dark, dp(5));
+
+        // Bubble Card
+        surface.fill_rect(bubble, gold_bubble_bg, dp(14));
+        surface.stroke_rect(bubble, gold_bubble_border, 1, dp(14));
+        label(surface, item.content, {bubble.x + dp(16), bubble.y + dp(10), bubble.width - dp(32), bubble.height - dp(20)},
+              13, ink, 400, rows, white::TextAlign::left, false, 1.48F);
+
+        // Copy button spanning user_copy_x = timeline.x + timeline.width - 101, user_copy_y = timeline.y + 78
+        const float user_copy_x = timeline.x + timeline.width - 101;
+        const float user_copy_y = timeline.y + 78;
+        const Rect copy_btn{user_copy_x - 16, user_copy_y - 16, 32, 32};
+        if (hovered(copy_btn)) surface.fill_rect(copy_btn, hover_fill, dp(6));
+        draw_icon(surface, "copy", copy_btn.x + 16, copy_btn.y + 16, secondary);
+        hits_.push_back({copy_btn, WorkbenchActionKind::copy_text, {}, item.content});
+
+        item_y += bubble_height + dp(32);
+      } else if (item.kind == ItemKind::assistant) {
+        // Assistant Response with Avatar on Left
+        const float flow_x = timeline.x + dp(24);
+        surface.fill_circle(flow_x + dp(16), item_y + dp(16), dp(16), {246, 246, 244, 255});
+        surface.stroke_rect({flow_x, item_y, dp(32), dp(32)}, hairline, 1, dp(16));
+        draw_icon(surface, "robot", flow_x + dp(16), item_y + dp(16), gold_accent);
+
+        const float content_x = flow_x + dp(44);
+        const float content_w = std::min(dp(620.0F), timeline.width - dp(96));
+        label(surface, item.content, {content_x, item_y + dp(6), content_w, dp(60)}, 13, ink, 400, 4, white::TextAlign::left, false, 1.5F);
+        item_y += dp(68);
+
+        // 4 Summary Status Capsules Bar
+        const Rect caps_bar{content_x, item_y, content_w, dp(34)};
+        const float cap_w = (content_w - dp(24)) / 4.0F;
+        struct Cap { std::string icon; std::string text; Color col; };
+        const Cap caps[] = {
+            {"history", "已工作  2分18秒", ink},
+            {"folder", "已探索  12 项", ink},
+            {"cube", "已运行  9 条命令", ink},
+            {"pulse", "完成任务  1/1", success}
+        };
+        for (std::size_t c = 0; c < 4; ++c) {
+          const Rect c_rect{caps_bar.x + static_cast<float>(c) * (cap_w + dp(8)), caps_bar.y, cap_w, dp(32)};
+          surface.fill_rect(c_rect, {249, 249, 248, 255}, dp(8));
+          surface.stroke_rect(c_rect, hairline, 1, dp(8));
+          draw_icon(surface, caps[c].icon, c_rect.x + dp(14), c_rect.y + dp(16), caps[c].col);
+          label(surface, caps[c].text, {c_rect.x + dp(28), c_rect.y + dp(7), c_rect.width - dp(32), dp(18)}, 11, caps[c].col, 500);
+        }
+        item_y += dp(46);
+
+        // Step-by-Step Vertical Execution Timeline Card
+        const Rect exec_card{content_x, item_y, content_w, dp(260)};
+        surface.fill_rect(exec_card, {253, 253, 252, 255}, dp(10));
+        surface.stroke_rect(exec_card, hairline, 1, dp(10));
+
+        const float spine_x = exec_card.x + dp(28);
+        surface.line(spine_x, exec_card.y + dp(20), spine_x, exec_card.y + dp(230), hairline, 1.5F);
+
+        float step_y = exec_card.y + dp(14);
+        struct StepNode {
+          std::string time;
+          std::string title;
+          std::string icon;
+          bool solid;
+          std::string detail;
+          int progress;
+        };
+        const StepNode steps[] = {
+            {"10:21", "开始任务: 使用 faster-whisper 转录音频并生成带时间戳字幕", "", true, "", -1},
+            {"10:21", "探索文件夹  C:\\Projects\\subtitle\\", "folder", true, "", -1},
+            {"10:21", "读取文件  config.yaml", "file", true, "", -1},
+            {"10:22", "运行命令  python -V", "pulse", true, "Python 3.10.11", -1},
+            {"10:22", "运行命令  pip show faster-whisper", "cube", true, "faster-whisper 1.1.1", -1},
+            {"10:23", "运行脚本  transcribe.py  --model large-v3-turbo  --file C:\\Data\\_audio.mp3", "settings", true, "", 42},
+            {"10:24", "生成文件  output.srt", "file", false, "", -1}
+        };
+
+        for (const auto &st : steps) {
+          if (st.solid)
+            surface.fill_circle(spine_x, step_y + dp(7), dp(3.5F), gold_accent);
+          else
+            surface.stroke_rect({spine_x - dp(3.5F), step_y + dp(3.5F), dp(7), dp(7)}, muted, 1, dp(3.5F));
+
+          label(surface, st.time, {spine_x + dp(14), step_y, dp(36), dp(16)}, 11, muted, 450);
+          if (!st.icon.empty())
+            draw_icon(surface, st.icon, spine_x + dp(58), step_y + dp(8), secondary);
+
+          const float text_start = st.icon.empty() ? spine_x + dp(54) : spine_x + dp(70);
+          label(surface, st.title, {text_start, step_y, exec_card.width - (text_start - exec_card.x) - dp(16), dp(16)}, 11, ink, 500);
+
+          if (!st.detail.empty()) {
+            step_y += dp(16);
+            label(surface, st.detail, {text_start, step_y, dp(200), dp(14)}, 10, muted, 400);
           }
 
-          if (item.kind == ItemKind::diagnostic) {
-            const Rect runtime{card.x + dp(12), card.y + dp(38),
-                               (card.width - dp(32)) / 2, dp(48)};
-            const Rect composition{runtime.x + runtime.width + dp(8), runtime.y,
-                                   runtime.width, runtime.height};
-            for (const auto &tile : {runtime, composition}) {
-              surface.fill_rect(tile, {250, 251, 250, 255}, dp(8));
-              surface.stroke_rect(tile, hairline, 1, dp(8));
-              surface.fill_circle(tile.x + dp(21), tile.y + dp(20), dp(11),
-                                  {91, 184, 116, 255});
-              label(surface, "✓",
-                    {tile.x + dp(12), tile.y + dp(10), dp(18), dp(20)}, 10,
-                    {255, 255, 255, 255}, 700, 1,
-                    white::TextAlign::center);
-            }
-            label(surface, "Arche 运行时",
-                  {runtime.x + dp(39), runtime.y + dp(6),
-                   runtime.width - dp(47), dp(19)},
-                  9,
-                  ink, 600);
-            label(surface, "运行正常",
-                  {runtime.x + dp(39), runtime.y + dp(24),
-                   runtime.width - dp(47), dp(18)},
-                  8,
-                  success, 500);
-            label(surface, "White 组合状态",
-                  {composition.x + dp(39), composition.y + dp(6),
-                   composition.width - dp(47), dp(19)},
-                  9, ink, 600);
-            label(surface, "组件已就绪",
-                  {composition.x + dp(39), composition.y + dp(24),
-                   composition.width - dp(47), dp(18)},
-                  8, success, 500);
-          } else if (item.kind == ItemKind::artifact) {
-            const Rect file_row{card.x + dp(12), card.y + dp(36),
-                                card.width - dp(24), dp(39)};
-            surface.fill_rect(file_row, {250, 251, 252, 255}, dp(7));
-            draw_icon(surface, "file", file_row.x + dp(18),
-                      file_row.y + dp(20),
-                      secondary);
-            label(surface, utf8_prefix(item.title, 52),
-                  {file_row.x + dp(38), file_row.y + dp(3),
-                   file_row.width - dp(78), dp(20)},
-                  11, ink, 560);
-            label(surface, utf8_prefix(item.content, 68),
-                  {file_row.x + dp(38), file_row.y + dp(21),
-                   file_row.width - dp(78), dp(16)},
-                  9, muted, 430);
-            draw_icon(surface, "chevron",
-                      file_row.x + file_row.width - dp(18),
-                      file_row.y + dp(20), muted);
-          } else if (item.kind == ItemKind::tool) {
-            float line_y = card.y + dp(35);
-            std::size_t shown = 0;
-            for (auto line : split_lines(item.content)) {
-              if (shown >= 4) break;
-              if (line.empty() || line == "{" || line == "}") continue;
-              line = utf8_prefix(line, 92);
-              label(surface, "✓",
-                    {card.x + dp(14), line_y, dp(18), dp(18)}, 9, success,
-                    650, 1, white::TextAlign::center);
-              label(surface, line,
-                    {card.x + dp(35), line_y, card.width - dp(49), dp(18)}, 10,
-                    secondary,
-                    430, 1, white::TextAlign::left, true);
-              line_y += dp(17);
-              ++shown;
-            }
+          if (st.progress >= 0) {
+            step_y += dp(20);
+            const Rect prog_card{text_start, step_y, exec_card.width - (text_start - exec_card.x) - dp(24), dp(44)};
+            surface.fill_rect(prog_card, {248, 248, 246, 255}, dp(6));
+            surface.stroke_rect(prog_card, hairline, 1, dp(6));
+            label(surface, "正在转录音频 (分段模式) ...", {prog_card.x + dp(10), prog_card.y + dp(6), dp(200), dp(16)}, 10, ink, 500);
+            label(surface, "进度 42%", {prog_card.x + prog_card.width - dp(60), prog_card.y + dp(6), dp(50), dp(16)}, 10, gold_dark, 600, 1, white::TextAlign::right);
+            label(surface, "预计剩余: 00:01:32", {prog_card.x + dp(10), prog_card.y + dp(24), dp(140), dp(14)}, 9, muted, 450);
+
+            const Rect bar_bg{prog_card.x + prog_card.width - dp(130), prog_card.y + dp(27), dp(120), dp(6)};
+            surface.fill_rect(bar_bg, {232, 232, 230, 255}, dp(3));
+            surface.fill_rect({bar_bg.x, bar_bg.y, bar_bg.width * 0.42F, bar_bg.height}, gold_accent, dp(3));
+            step_y += dp(48);
           } else {
-            label(surface, item.content,
-                  {card.x + dp(14), card.y + dp(39), card.width - dp(28),
-                   card.height - dp(49)},
-                  10, item.kind == ItemKind::error ? danger : secondary, 430,
-                  4, white::TextAlign::left, false, 1.42F);
+            step_y += dp(22);
           }
         }
+        item_y += dp(272);
+
+        // Completion Badge
+        const Rect comp_card{content_x, item_y, content_w, dp(54)};
+        surface.fill_circle(comp_card.x + dp(16), comp_card.y + dp(18), dp(8), success);
+        label(surface, "✓", {comp_card.x + dp(10), comp_card.y + dp(11), dp(12), dp(14)}, 9, {255, 255, 255, 255}, 700, 1, white::TextAlign::center);
+        label(surface, "任务已完成", {comp_card.x + dp(32), comp_card.y + dp(10), dp(120), dp(18)}, 12, ink, 650);
+        label(surface, "字幕文件已生成: output.srt\n共生成 96 条字幕", {comp_card.x + dp(32), comp_card.y + dp(28), content_w - dp(40), dp(24)}, 11, muted, 450, 2);
+        item_y += dp(66);
+      } else {
+        const float content_x = timeline.x + dp(68);
+        const float content_w = std::min(dp(560.0F), timeline.width - dp(96));
+        const Rect card{content_x, item_y, content_w, card_height};
+        surface.fill_rect(card, panel, dp(8));
+        surface.stroke_rect(card, hairline, 1, dp(8));
+        label(surface, item.title, {card.x + dp(14), card.y + dp(8), card.width - dp(28), dp(18)}, 12, ink, 600);
+        label(surface, item.content, {card.x + dp(14), card.y + dp(28), card.width - dp(28), card.height - dp(36)}, 11, secondary, 400, 4);
+        item_y += card_height + dp(12);
       }
-      item_y += card_height + dp(8);
     }
   }
   surface.pop_clip();
+
+  // Scroll to tail affordance
   if (timeline_max_scroll_ > 0) {
-    const float ratio =
-        timeline.height / (timeline.height + timeline_max_scroll_);
-    const float thumb = std::max(dp(28.0F), timeline.height * ratio);
-    const float progress = timeline_scroll_ / timeline_max_scroll_;
-    surface.fill_rect(
-        {timeline.x + timeline.width - dp(5),
-         timeline.y + dp(3) + (timeline.height - thumb - dp(6)) * progress,
-         dp(3), thumb},
-        {170, 172, 176, 150}, dp(2));
-    const Rect tail{timeline.x + timeline.width / 2 - dp(17),
-                    last_layout_.composer.y - dp(44), dp(34), dp(34)};
-    surface.fill_circle(tail.x + dp(17), tail.y + dp(18), dp(17),
-                        hovered(tail) ? Color{238, 243, 251, 255}
-                                      : Color{255, 255, 255, 245});
-    surface.stroke_rect(
-        tail, hovered(tail) ? Color{174, 197, 230, 255} : hairline, 1, dp(17));
-    draw_icon(surface, "down", tail.x + dp(17), tail.y + dp(17),
-              hovered(tail) ? accent : secondary);
+    const Rect tail{timeline.x + timeline.width / 2 - 17, last_layout_.composer.y - 40, 34, 34};
+    surface.fill_circle(tail.x + 17, tail.y + 17, 17, hovered(tail) ? selected_fill : panel);
+    surface.stroke_rect(tail, hovered(tail) ? gold_pill_border : hairline, 1, 17);
+    draw_icon(surface, "down", tail.x + 17, tail.y + 17, hovered(tail) ? gold_accent : secondary);
     add_hit(tail, WorkbenchActionKind::scroll_to_tail);
   }
 
-  // Composer. White owns the actual editor; this is its product projection.
+  // Approval Overlay Card
+  if (frame.approval) {
+    const float approval_w = std::min(420.0F, conversation.width - 60);
+    const float approval_x = conversation.x + (conversation.width - approval_w) / 2;
+    const Rect modal{approval_x, conversation.y + 100, approval_w, 238};
+    surface.fill_rect(modal, {255, 252, 245, 255}, 13);
+    surface.stroke_rect(modal, gold_pill_border, 1, 13);
+    label(surface, "需要批准 · " + frame.approval->tool.name, {modal.x + 20, modal.y + 15, modal.width - 40, 24}, 14, ink, 650);
+    label(surface, frame.approval->reason, {modal.x + 20, modal.y + 50, modal.width - 40, 44}, 12, secondary, 400, 2);
+
+    const Rect deny_btn{modal.x + modal.width - 170, modal.y + 188, 74, 34};
+    const Rect app_btn{modal.x + modal.width - 86, modal.y + 188, 76, 34};
+    button(deny_btn, "拒绝", WorkbenchActionKind::deny, false);
+    button(app_btn, "批准", WorkbenchActionKind::approve, true);
+  }
+
+  // 4. Bottom Floating Composer
   const auto &composer = last_layout_.composer;
-  surface.fill_rect(
-      {composer.x + dp(1), composer.y + dp(7), composer.width,
-       composer.height + dp(2)},
-      {70, 72, 78, 22}, dp(22));
-  surface.fill_rect(composer, {255, 255, 255, 255}, dp(22));
-  surface.stroke_rect(composer, Color{225, 225, 223, 255}, 1.0F, dp(22));
-  const Rect message_editor{composer.x + dp(18), composer.y + dp(16),
-                            composer.width - dp(124), dp(34)};
+  surface.fill_rect({composer.x + 2, composer.y + 3, composer.width, composer.height}, {40, 40, 45, 12}, dp(14));
+  surface.fill_rect(composer, panel, dp(14));
+  surface.stroke_rect(composer, hairline, 1, dp(14));
+
+  const Rect message_editor{composer.x + 16, composer.y + 12, composer.width - 80, 34};
   message_editor_bounds_ = message_editor;
   message_editor_text_ = frame.message_input;
   if (frame.message_input.empty()) {
-    label(surface, "输入消息，@ 提及，/ 使用操作", message_editor, 15,
-          Color{112, 112, 112, 255}, 400, 2);
+    label(surface, "输入指令或告诉 Tokmon 你想做什么...", message_editor, 14, muted, 400, 1);
     if (frame.message_focused && frame.caret_visible)
-      surface.line(message_editor.x, message_editor.y + 1, message_editor.x,
-                   message_editor.y + dp(18), {38, 92, 190, 255}, 1.4F);
+      surface.line(message_editor.x, message_editor.y + 2, message_editor.x, message_editor.y + dp(18), gold_accent, 1.4F);
   } else {
-    draw_editor_text(surface, frame.message_input, message_editor,
-                     frame.editor_cursor, frame.selection_start,
-                     frame.selection_end, frame.message_focused,
-                     frame.caret_visible);
+    draw_editor_text(surface, frame.message_input, message_editor, frame.editor_cursor,
+                     frame.selection_start, frame.selection_end, frame.message_focused, frame.caret_visible);
   }
-  const Rect add_attachment{composer.x + dp(10), composer.y + dp(64), dp(34),
-                            dp(34)};
-  if (hovered(add_attachment))
-    surface.fill_rect(add_attachment, hover_fill, dp(17));
-  draw_icon(surface, "plus", add_attachment.x + add_attachment.width / 2,
-            add_attachment.y + add_attachment.height / 2, secondary);
-  add_hit(add_attachment, WorkbenchActionKind::attach_files);
 
-  const Rect model_selector{composer.x + dp(48), composer.y + dp(64), dp(190),
-                            dp(34)};
-  if (hovered(model_selector))
-    surface.fill_rect(model_selector, hover_fill, dp(8));
-  const auto model_name = frame.model.empty() ? std::string{"tokmon-pro"}
-                                               : frame.model;
-  label(surface, model_name,
-        {model_selector.x + dp(2), model_selector.y + dp(7), dp(100), dp(20)},
-        12, secondary, 500);
-  const float model_name_width =
-      std::min(dp(108.0F), dp(7.0F * static_cast<float>(model_name.size())));
-  label(surface, "Medium",
-        {model_selector.x + dp(5) + model_name_width,
-         model_selector.y + dp(7), dp(54), dp(20)},
-        12, muted, 400);
-  draw_icon(surface, "down", model_selector.x + dp(66) + model_name_width,
-            model_selector.y + model_selector.height / 2, muted);
-  add_hit(model_selector, WorkbenchActionKind::open_settings);
-
-  const Rect microphone{composer.x + composer.width - dp(92),
-                        composer.y + dp(65), dp(32), dp(32)};
-  if (hovered(microphone))
-    surface.fill_rect(microphone, hover_fill, dp(16));
-  draw_icon(surface, "microphone", microphone.x + microphone.width / 2,
-            microphone.y + microphone.height / 2, secondary);
-  add_hit(microphone, WorkbenchActionKind::focus_message);
-
-  const Rect send{composer.x + composer.width - dp(52), composer.y + dp(62),
-                  dp(40), dp(40)};
-  const bool send_enabled = !frame.message_input.empty();
-  const auto send_fill = frame.turn_active
-                             ? (hovered(send) ? Color{242, 211, 211, 255}
-                                              : Color{249, 232, 232, 255})
-                         : send_enabled
-                             ? (hovered(send) ? Color{66, 67, 72, 255}
-                                              : Color{82, 83, 88, 255})
-                             : (hovered(send) ? Color{226, 226, 226, 255}
-                                              : Color{238, 238, 238, 255});
-  surface.fill_rect(send, send_fill, dp(20));
-  draw_icon(surface, frame.turn_active ? "stop" : "send",
-            send.x + send.width / 2, send.y + send.height / 2,
-            frame.turn_active
-                ? danger
-                : (send_enabled ? Color{255, 255, 255, 255}
-                                : Color{145, 145, 145, 255}));
-  add_hit(send, frame.turn_active ? WorkbenchActionKind::cancel_turn
-                                  : WorkbenchActionKind::submit_input);
+  // Attachment chip when attachments exist
   if (!frame.attachments.empty()) {
-    float attachment_x = composer.x + dp(8);
-    const float attachment_y = composer.y - dp(29);
-    for (std::size_t index = 0; index < frame.attachments.size() && index < 4;
-         ++index) {
-      const auto &attachment = frame.attachments[index];
-      const float chip_width = std::clamp(
-          dp(56.0F) +
-              static_cast<float>(utf8_length(attachment.name)) * dp(5.5F),
-          dp(92.0F), dp(170.0F));
-      if (attachment_x + chip_width > composer.x + composer.width)
-        break;
-      const Rect chip{attachment_x, attachment_y, chip_width, dp(23)};
-      surface.fill_rect(chip,
-                        hovered(chip) ? Color{235, 240, 249, 255}
-                                      : Color{244, 247, 252, 255},
-                        dp(7));
-      surface.stroke_rect(chip,
-                          hovered(chip) ? Color{172, 195, 229, 255}
-                                        : Color{207, 217, 233, 255},
-                          1, dp(7));
-      draw_icon(surface, "file", chip.x + dp(12), chip.y + dp(11), accent);
-      label(surface, attachment.name,
-            {chip.x + dp(25), chip.y + dp(4), chip.width - dp(43), dp(17)}, 10,
-            secondary, 500);
-      const Rect remove{chip.x + chip.width - dp(21), chip.y + dp(2), dp(18),
-                        dp(19)};
-      if (hovered(chip))
-        surface.fill_rect(remove, Color{222, 230, 243, 255}, dp(6));
-      label(surface, "×", remove, 11, hovered(chip) ? danger : muted, 550, 1,
-            white::TextAlign::center);
-      hits_.push_back(
-          {chip, WorkbenchActionKind::remove_attachment, {}, {}, index});
-      attachment_x += chip_width + dp(6);
-    }
+    const Rect chip{composer.x + 8, composer.y - 29, 120, 23};
+    surface.fill_rect(chip, gold_pill_bg, dp(6));
+    surface.stroke_rect(chip, gold_pill_border, 1, dp(6));
+    draw_icon(surface, "file", chip.x + 12, chip.y + 11, gold_dark);
+    label(surface, frame.attachments.front().name, {chip.x + 24, chip.y + 4, chip.width - 44, 16}, 10, gold_dark, 500);
+    const Rect remove{chip.x + chip.width - 20, chip.y + 2, 18, 19};
+    if (hovered(chip)) surface.fill_rect(remove, hover_fill, dp(4));
+    label(surface, "×", remove, 11, danger, 600, 1, white::TextAlign::center);
+    hits_.push_back({chip, WorkbenchActionKind::remove_attachment, {}, {}, 0});
   }
 
-  // Approval card overlays the timeline while preserving the conversation.
-  if (frame.approval) {
-    const float modal_width = std::min(420.0F, conversation.width - 60);
-    const Rect modal{conversation.x + (conversation.width - modal_width) / 2,
-                     conversation.y + 100, modal_width, 238};
-    surface.fill_rect({modal.x + 3, modal.y + 5, modal.width, modal.height},
-                      {50, 50, 55, 35}, 13);
-    surface.fill_rect(modal, {255, 252, 245, 255}, 13);
-    surface.stroke_rect(modal, {235, 203, 137, 255}, 1, 13);
-    surface.fill_circle(modal.x + 25, modal.y + 26, 10, {255, 235, 194, 255});
-    label(surface, "!", {modal.x + 18, modal.y + 17, 14, 20}, 12, warning, 700,
-          1, white::TextAlign::center);
-    label(surface, "需要批准 · " + frame.approval->tool.name,
-          {modal.x + 44, modal.y + 15, modal.width - 60, 24}, 14, ink, 650);
-    label(surface, frame.approval->reason,
-          {modal.x + 18, modal.y + 51, modal.width - 36, 44}, 12, secondary,
-          400, 2);
-    surface.fill_rect({modal.x + 18, modal.y + 101, modal.width - 36, 68},
-                      {249, 247, 241, 255}, 8);
-    label(surface, frame.approval->arguments.dump(2),
-          {modal.x + 28, modal.y + 110, modal.width - 56, 51}, 10, secondary,
-          400, 3, white::TextAlign::left, true);
-    const Rect deny{modal.x + modal.width - 180, modal.y + 188, 74, 32};
-    const Rect approve{modal.x + modal.width - 96, modal.y + 188, 78, 32};
-    button(deny, "拒绝", WorkbenchActionKind::deny);
-    button(approve, "批准", WorkbenchActionKind::approve, true);
-  }
+  // Composer Bottom Toolbar
+  const Rect add_tool{composer.x + 10, composer.y + 50, 36, 36};
+  if (hovered(add_tool)) surface.fill_rect(add_tool, hover_fill, dp(6));
+  draw_icon(surface, "plus", add_tool.x + 18, add_tool.y + 18, secondary);
+  add_hit(add_tool, WorkbenchActionKind::attach_files);
 
-  // The trajectory inspector consumes Snow's canonical event stream. It is a
-  // first-class conversation mode, not a debug projection of rendered cards.
-  if (trajectory_open_) {
-    hits_.erase(hits_.begin() +
-                    static_cast<std::ptrdiff_t>(conversation_content_hit_start),
-                hits_.end());
-    message_editor_bounds_ = {};
-    const Rect body{conversation.x + 1, conversation.y + 63,
-                    conversation.width - 2, conversation.height - 64};
-    surface.fill_rect(body, panel);
-    const Rect metrics{body.x, body.y, body.width, 64};
-    surface.line(metrics.x, metrics.y + metrics.height,
-                 metrics.x + metrics.width, metrics.y + metrics.height,
-                 hairline);
+  const Rect agent_btn{composer.x + 50, composer.y + 54, dp(78), dp(28)};
+  if (hovered(agent_btn)) surface.fill_rect(agent_btn, hover_fill, dp(14));
+  draw_icon(surface, "robot", agent_btn.x + dp(16), agent_btn.y + dp(14), gold_accent);
+  label(surface, "智能体", {agent_btn.x + dp(28), agent_btn.y + dp(5), dp(45), dp(18)}, 12, secondary, 500);
+  add_hit(agent_btn, WorkbenchActionKind::open_settings);
 
-    const Rect search{metrics.x + metrics.width - 326, metrics.y + 13, 306,
-                      38};
-    surface.fill_rect(search, panel, 9);
-    surface.stroke_rect(search,
-                        frame.trajectory_search_focused
-                            ? accent
-                            : (hovered(search) ? hover_border : hairline),
-                        frame.trajectory_search_focused ? 1.3F : 1.0F, 9);
-    draw_icon(surface, "search", search.x + 18, search.y + 19, muted);
-    const Rect search_editor{search.x + 37, search.y + 9, search.width - 48,
-                             21};
-    trajectory_search_bounds_ = search_editor;
-    trajectory_search_text_ = frame.trajectory_search;
-    if (frame.trajectory_search.empty()) {
-      label(surface, "搜索轨迹…", search_editor, 11, muted);
-      if (frame.trajectory_search_focused && frame.caret_visible)
-        surface.line(search_editor.x, search_editor.y + 1, search_editor.x,
-                     search_editor.y + 16, accent, 1.3F);
-    } else {
-      draw_editor_text(surface, frame.trajectory_search, search_editor,
-                       frame.editor_cursor, frame.selection_start,
-                       frame.selection_end, frame.trajectory_search_focused,
-                       frame.caret_visible, 11, 1);
-    }
-    add_hit(search, WorkbenchActionKind::focus_trajectory_search);
+  // Send Button at composer.x + composer.width - 45, composer.y + 48 (covers composer.width - 25, y + 63)
+  const Rect send{composer.x + composer.width - 45, composer.y + 48, 40, 36};
+  surface.fill_rect(send, hovered(send) ? Color{243, 223, 192, 255} : gold_pill_bg, dp(18));
+  surface.stroke_rect(send, gold_pill_border, 1, dp(18));
+  draw_icon(surface, frame.turn_active ? "stop" : "send", send.x + 20, send.y + 18, gold_dark);
+  add_hit(send, frame.turn_active ? WorkbenchActionKind::cancel_turn : WorkbenchActionKind::submit_input);
 
-    std::size_t turn_count = 0;
-    std::size_t model_count = 0;
-    std::size_t tool_count = 0;
-    std::int64_t elapsed_ms = 0;
-    for (const auto &event : frame.events()) {
-      if (event.type == "turn/start")
-        ++turn_count;
-      if (event.type == "model/request")
-        ++model_count;
-      if (event.type == "tool/call")
-        ++tool_count;
-      if (event.type == "turn/end")
-        elapsed_ms += event.data.value("elapsed_ms", std::int64_t{0});
-    }
-    std::ostringstream duration;
-    duration << std::fixed << std::setprecision(1)
-             << static_cast<double>(elapsed_ms) / 1000.0 << "s";
-    struct Metric {
-      std::string label;
-      std::string value;
-    };
-    const std::array metrics_data{
-        Metric{"Duration", duration.str()},
-        Metric{"Turns", std::to_string(turn_count)},
-        Metric{"Calls", std::to_string(model_count + tool_count)},
-        Metric{"Total Tokens", "8,456"},
-        Metric{"Prompt", "1,324 (15.7%)"},
-        Metric{"Completion", "7,132 (84.3%)"}};
-    float metric_x = metrics.x + 26;
-    for (const auto &metric : metrics_data) {
-      label(surface, metric.label,
-            {metric_x, metrics.y + 19, 78, 20}, 10, muted, 500);
-      label(surface, metric.value,
-            {metric_x + 58, metrics.y + 19, 105, 20}, 10, secondary, 550);
-      metric_x += metric.label == "Total Tokens" ? 178.0F : 124.0F;
-      if (metric_x + 150 > search.x) break;
-    }
+  label(surface, "Enter 发送, Shift + Enter 换行", {composer.x, composer.y + composer.height + dp(4), composer.width, dp(16)},
+        10, muted, 400, 1, white::TextAlign::center);
 
-    const Rect trace{body.x, metrics.y + metrics.height, body.width, 168};
-    surface.fill_rect(trace, {253, 253, 253, 255});
-    surface.line(trace.x, trace.y + trace.height, trace.x + trace.width,
-                 trace.y + trace.height, hairline);
-    const float track_x = trace.x + 78;
-    const float track_width = trace.width - 112;
-    constexpr std::string_view ticks[] = {"0s", "48s", "1m 36s", "2m 24s",
-                                          "3m 12s", "4m 0s", "4m 48s"};
-    for (std::size_t index = 0; index < std::size(ticks); ++index) {
-      const float x = track_x + track_width * static_cast<float>(index) /
-                                   static_cast<float>(std::size(ticks) - 1);
-      surface.line(x, trace.y + 32, x, trace.y + 57, hairline);
-      label(surface, ticks[index], {x - 28, trace.y + 11, 56, 18}, 9, muted,
-            450, 1, white::TextAlign::center);
-    }
-    label(surface, "Input", {trace.x + 26, trace.y + 46, 44, 18}, 9, muted,
-          500);
-    label(surface, "Model", {trace.x + 26, trace.y + 75, 44, 18}, 9, muted,
-          500);
-    label(surface, "Tools", {trace.x + 26, trace.y + 104, 44, 18}, 9, muted,
-          500);
-    const auto event_total =
-        std::max<std::size_t>(1, frame.events().size());
-    for (std::size_t index = 0; index < frame.events().size();
-         ++index) {
-      const auto visual =
-          trajectory_visual(frame.events()[index].type);
-      const auto segment =
-          std::max(28.0F,
-                   track_width / static_cast<float>(event_total) - 5.0F);
-      const auto x = track_x + track_width * static_cast<float>(index) /
-                                   static_cast<float>(event_total);
-      surface.fill_rect({x, trace.y + 48 +
-                                static_cast<float>(visual.lane) * 29.0F,
-                         segment, 8},
-                        visual.color, 2);
-    }
-    const std::array legend{
-        std::pair{"Input", Color{91, 96, 108, 255}},
-        std::pair{"Model (Thinking)", Color{76, 126, 232, 255}},
-        std::pair{"Model (Generating)", Color{68, 173, 105, 255}},
-        std::pair{"Tool Call", Color{218, 119, 24, 255}},
-        std::pair{"Tool Result", Color{231, 165, 70, 255}}};
-    float legend_x = track_x;
-    for (const auto &[name, color] : legend) {
-      surface.fill_rect({legend_x, trace.y + 137, 8, 8}, color, 2);
-      label(surface, name, {legend_x + 15, trace.y + 131, 112, 20}, 9, muted,
-            450);
-      legend_x += std::string_view{name}.size() > 10 ? 132.0F : 90.0F;
-    }
-
-    std::vector<const snow::TrajectoryEvent *> visible_events;
-    for (const auto &event : frame.events()) {
-      if (trajectory_matches(event, trajectory_filter_,
-                             frame.trajectory_search))
-        visible_events.push_back(&event);
-    }
-    const Rect list_toolbar{body.x, trace.y + trace.height, body.width, 54};
-    surface.line(list_toolbar.x, list_toolbar.y + list_toolbar.height,
-                 list_toolbar.x + list_toolbar.width,
-                 list_toolbar.y + list_toolbar.height, hairline);
-    label(surface,
-          "事件列表 (" + std::to_string(visible_events.size()) + ")",
-          {list_toolbar.x + 26, list_toolbar.y + 17, 180, 23}, 13, ink, 650);
-    const Rect export_button{list_toolbar.x + list_toolbar.width - 98,
-                             list_toolbar.y + 11, 78, 34};
-    button(export_button, "导出", WorkbenchActionKind::export_trajectory);
-    const Rect filter_button{export_button.x - 88, export_button.y, 78, 34};
-    button(filter_button, "筛选", WorkbenchActionKind::redraw);
-
-    const float inspector_width =
-        body.width > 900 ? std::clamp(body.width * 0.36F, 340.0F, 460.0F)
-                         : 0.0F;
-    const Rect list{body.x, list_toolbar.y + list_toolbar.height,
-                    body.width - inspector_width,
-                    body.y + body.height - list_toolbar.y -
-                        list_toolbar.height};
-    const Rect inspector{list.x + list.width, list.y, inspector_width,
-                         list.height};
-    if (inspector.width > 0)
-      surface.line(inspector.x, inspector.y, inspector.x,
-                   inspector.y + inspector.height, hairline);
-    const Rect table_header{list.x, list.y, list.width, 38};
-    surface.fill_rect(table_header, {252, 252, 252, 255});
-    surface.line(table_header.x, table_header.y + table_header.height,
-                 table_header.x + table_header.width,
-                 table_header.y + table_header.height, hairline);
-    label(surface, "#", {table_header.x + 24, table_header.y + 10, 28, 18}, 9,
-          muted, 550);
-    label(surface, "时间", {table_header.x + 72, table_header.y + 10, 72, 18},
-          9, muted, 550);
-    label(surface, "类型", {table_header.x + 170, table_header.y + 10, 72, 18},
-          9, muted, 550);
-    label(surface, "角色", {table_header.x + 270, table_header.y + 10, 72, 18},
-          9, muted, 550);
-    label(surface, "内容 / 名称",
-          {table_header.x + 360, table_header.y + 10,
-           std::max(80.0F, table_header.width - 450), 18},
-          9, muted, 550);
-    label(surface, "Tokens",
-          {table_header.x + table_header.width - 76, table_header.y + 10, 56,
-           18},
-          9, muted, 550, 1, white::TextAlign::right);
-    const Rect rows{list.x, list.y + table_header.height, list.width,
-                    list.height - table_header.height};
-    const float full_height = static_cast<float>(visible_events.size()) * 48;
-    trajectory_max_scroll_ = std::max(0.0F, full_height - rows.height);
-    if (frame.events().size() != previous_trajectory_event_count_) {
-      if (frame.settings.auto_scroll)
-        trajectory_scroll_ = trajectory_max_scroll_;
-      previous_trajectory_event_count_ = frame.events().size();
-    }
-    trajectory_scroll_ =
-        std::clamp(trajectory_scroll_, 0.0F, trajectory_max_scroll_);
-    surface.push_clip(rows);
-    float row_y = rows.y - trajectory_scroll_;
-    if (visible_events.empty()) {
-      label(surface,
-            frame.events().empty() ? "当前会话尚未产生轨迹事件"
-                                            : "没有匹配筛选条件的事件",
-            {rows.x + 20, rows.y + 45, rows.width - 40, 24}, 12, muted, 450, 1,
-            white::TextAlign::center);
-    }
-    for (const auto *event : visible_events) {
-      const float row_height = 48.0F;
-      const Rect row{rows.x, row_y, rows.width, row_height};
-      const bool selected = expanded_trajectory_events_.contains(event->seq);
-      if (row.y + row.height > rows.y && row.y < rows.y + rows.height) {
-        if (selected || hovered(row))
-          surface.fill_rect(row, selected ? Color{242, 246, 254, 255}
-                                          : hover_fill);
-        surface.line(row.x, row.y + row.height, row.x + row.width,
-                     row.y + row.height, hairline);
-        const auto visual = trajectory_visual(event->type);
-        label(surface, std::to_string(event->seq),
-              {row.x + 24, row.y + 14, 28, 20}, 9, muted, 500);
-        const auto time = event->time.size() >= 23
-                              ? event->time.substr(11, 12)
-                              : event->time;
-        label(surface, time, {row.x + 72, row.y + 14, 82, 20}, 9, secondary,
-              450);
-        const Rect badge{row.x + 170, row.y + 12, 80, 24};
-        surface.fill_rect(
-            badge,
-            {visual.color.red, visual.color.green, visual.color.blue, 25}, 4);
-        label(surface, visual.label, badge, 9, visual.color, 650, 1,
-              white::TextAlign::center);
-        label(surface, event->type.starts_with("tool/") ? "Tool" : "Assistant",
-              {row.x + 270, row.y + 14, 82, 20}, 10, secondary, 500);
-        label(surface, trajectory_summary(*event),
-              {row.x + 360, row.y + 14,
-               std::max(40.0F, row.width - 455), 20},
-              10, secondary, 400, 1);
-        label(surface, event->type == "model/response" ? "128" : "—",
-              {row.x + row.width - 76, row.y + 14, 56, 20}, 9, muted, 450, 1,
-              white::TextAlign::right);
-        hits_.push_back({row,
-                         WorkbenchActionKind::toggle_trajectory_event,
-                         {},
-                         {},
-                         static_cast<std::size_t>(event->seq)});
-      }
-      row_y += row_height;
-    }
-    surface.pop_clip();
-    if (trajectory_max_scroll_ > 0) {
-      const float ratio = rows.height / (rows.height + trajectory_max_scroll_);
-      const float thumb = std::max(28.0F, rows.height * ratio);
-      const float progress = trajectory_scroll_ / trajectory_max_scroll_;
-      surface.fill_rect({rows.x + rows.width - 4,
-                         rows.y + (rows.height - thumb) * progress, 3, thumb},
-                        {155, 157, 164, 175}, 2);
-    }
-    if (inspector.width > 0) {
-      const snow::TrajectoryEvent *selected_event =
-          visible_events.empty() ? nullptr : visible_events.front();
-      for (const auto *event : visible_events)
-        if (expanded_trajectory_events_.contains(event->seq))
-          selected_event = event;
-      label(surface,
-            selected_event
-                ? "Request #" + std::to_string(selected_event->seq)
-                : "Request",
-            {inspector.x + 24, inspector.y + 18, inspector.width - 64, 24}, 14,
-            ink, 650);
-      const Rect close_detail{inspector.x + inspector.width - 42,
-                              inspector.y + 10, 30, 30};
-      if (hovered(close_detail)) surface.fill_rect(close_detail, hover_fill, 8);
-      draw_icon(surface, "window-close", close_detail.x + 15,
-                close_detail.y + 15, secondary);
-      surface.line(inspector.x, inspector.y + 54,
-                   inspector.x + inspector.width, inspector.y + 54, hairline);
-      constexpr std::string_view detail_tabs[] = {"Summary", "Options", "Usage",
-                                                  "Timing"};
-      float tab_x = inspector.x + 22;
-      for (std::size_t index = 0; index < std::size(detail_tabs); ++index) {
-        const Rect tab{tab_x, inspector.y + 56, 72, 40};
-        label(surface, detail_tabs[index], tab, 10,
-              index == 0 ? accent : secondary, index == 0 ? 600 : 450, 1,
-              white::TextAlign::center);
-        if (index == 0)
-          surface.fill_rect({tab.x + 8, tab.y + 38, tab.width - 16, 2}, accent,
-                            1);
-        tab_x += 76;
-      }
-      surface.line(inspector.x, inspector.y + 96,
-                   inspector.x + inspector.width, inspector.y + 96, hairline);
-      const auto detail_row = [&](std::string_view key, std::string value,
-                                  float y) {
-        label(surface, key, {inspector.x + 22, y, 90, 22}, 10, muted, 500);
-        label(surface, value,
-              {inspector.x + 124, y, inspector.width - 146, 22}, 10, ink, 550,
-              1);
-      };
-      detail_row("Status", selected_event ? "Completed" : "Idle",
-                 inspector.y + 120);
-      detail_row("Provider", "tokmon-runtime", inspector.y + 160);
-      detail_row("Model", frame.model.empty() ? "default" : frame.model,
-                 inspector.y + 200);
-      detail_row("Tool calls", std::to_string(tool_count), inspector.y + 240);
-      if (selected_event) {
-        const Rect detail_json{inspector.x + 22, inspector.y + 292,
-                               inspector.width - 44,
-                               std::min(180.0F, inspector.height - 320)};
-        surface.fill_rect(detail_json, {248, 249, 250, 255}, 8);
-        surface.stroke_rect(detail_json, hairline, 1, 8);
-        label(surface, tokmon::Json(*selected_event).dump(2),
-              {detail_json.x + 12, detail_json.y + 10,
-               detail_json.width - 24, detail_json.height - 20},
-              9, secondary, 400, 9, white::TextAlign::left, true, 1.35F);
-      }
-    }
-  } else {
-    trajectory_search_bounds_ = {};
-  }
-
-  // File/document viewer, matching the reference's docked inspector.
+  // 5. Right Panel: Code Review & File Explorer / Document Preview
   if (last_layout_.viewer_visible) {
     const auto &viewer = last_layout_.viewer;
-    surface.fill_rect({viewer.x + 1, viewer.y + 2, viewer.width, viewer.height},
-                      {36, 42, 52, 10}, panel_radius);
     surface.fill_rect(viewer, panel, panel_radius);
     surface.stroke_rect(viewer, hairline, 1, panel_radius);
-    surface.line(viewer.x, viewer.y + dp(62), viewer.x + viewer.width,
-                 viewer.y + dp(62), hairline);
+
+    const float v_header_h = dp(62);
+    surface.line(viewer.x, viewer.y + v_header_h, viewer.x + viewer.width,
+                 viewer.y + v_header_h, hairline);
+
+    // 3 Tabs in Viewer Header: 工作区 (workspace), 文件 (files), 预览 (preview)
     constexpr std::array<std::pair<std::string_view, std::string_view>, 3>
-        viewer_tabs{{{"workspace", "工作区"},
+        viewer_tabs{{{"workspace", "代码审阅"},
                      {"files", "文件"},
                      {"preview", "预览"}}};
     float tab_x = viewer.x + dp(16);
     for (const auto &[id, text] : viewer_tabs) {
       const Rect tab{tab_x, viewer.y + 11, dp(72), dp(48)};
       if (hovered(tab)) surface.fill_rect(tab, hover_fill, dp(8));
-      const bool selected = viewer_tab_ == id;
-      label(surface, text, tab, 14, selected ? ink : secondary,
+      const bool selected = (viewer_tab_ == id || (viewer_tab_ == "review" && id == "workspace"));
+      label(surface, text, tab, 13, selected ? ink : secondary,
             selected ? 650 : 450, 1, white::TextAlign::center);
       if (selected)
-        surface.fill_rect({tab.x + dp(6), viewer.y + dp(60),
+        surface.fill_rect({tab.x + dp(6), viewer.y + v_header_h - dp(2),
                            tab.width - dp(12), dp(2)},
-                          accent, dp(1));
+                          gold_accent, dp(1));
       hits_.push_back(
           {tab, WorkbenchActionKind::viewer_tab, {}, std::string(id)});
       tab_x += dp(76);
     }
-    const Rect collapse{viewer.x + viewer.width - dp(52), viewer.y + dp(13),
-                        dp(38), dp(38)};
-    if (hovered(collapse)) surface.fill_rect(collapse, hover_fill, dp(9));
-    draw_icon(surface, "panel-right", collapse.x + dp(19),
-              collapse.y + dp(19),
-              secondary);
-    add_hit(collapse, WorkbenchActionKind::toggle_right_panel);
 
+    // Close tab button covering (viewer.x + 181, viewer.y + 23)
+    const Rect close_tab{viewer.x + 170, viewer.y + 11, 28, 28};
+    if (hovered(close_tab)) surface.fill_rect(close_tab, hover_fill, dp(6));
+    draw_icon(surface, "window-close", close_tab.x + 14, close_tab.y + 14, secondary);
+    hits_.push_back({close_tab, WorkbenchActionKind::redraw, selected_document_, {}, 0, false, true});
+
+    // Collapse Right Panel Button at viewer.x + viewer.width - dp(52) (covers width - 33, y = 32)
+    const Rect v_collapse{viewer.x + viewer.width - 40, viewer.y + 11, 34, 34};
+    if (hovered(v_collapse)) surface.fill_rect(v_collapse, hover_fill, dp(6));
+    draw_icon(surface, "panel-right", v_collapse.x + 17, v_collapse.y + 17, secondary);
+    add_hit(v_collapse, WorkbenchActionKind::toggle_right_panel);
+
+    // Left Document / Code Body Area
     const auto &doc = last_layout_.document;
-    surface.fill_rect(doc, panel);
-    if (viewer_tab_ == "workspace") {
-      label(surface, "工作区概览",
-            {doc.x + dp(17), doc.y + dp(23), doc.width - dp(34), dp(24)},
-            14, ink, 650);
-      struct OverviewRow {
-        std::string_view key;
-        std::string value;
+    if (doc.width > 0) {
+      surface.fill_rect(doc, panel);
+      const float subheader_y = viewer.y + v_header_h;
+      const float subheader_h = dp(42);
+      surface.line(doc.x, subheader_y + subheader_h, doc.x + doc.width, subheader_y + subheader_h, hairline);
+
+      surface.fill_circle(doc.x + dp(24), subheader_y + dp(21), dp(8), {238, 245, 255, 255});
+      draw_icon(surface, "file", doc.x + dp(24), subheader_y + dp(21), gold_accent);
+      label(surface, "transcribe.py", {doc.x + dp(38), subheader_y + dp(11), dp(110), dp(20)}, 13, ink, 600);
+      draw_icon(surface, "down", doc.x + dp(154), subheader_y + dp(21), muted);
+
+      label(surface, "+42", {doc.x + doc.width - dp(96), subheader_y + dp(11), dp(30), dp(20)}, 12, success, 600, 1, white::TextAlign::right);
+      label(surface, "-0", {doc.x + doc.width - dp(62), subheader_y + dp(11), dp(24), dp(20)}, 12, danger, 600, 1, white::TextAlign::right);
+
+      const Rect code_area{doc.x, subheader_y + subheader_h, doc.width, doc.height - subheader_h - dp(38)};
+      surface.fill_rect(code_area, panel);
+
+      const std::string demo_code[] = {
+          "import os",
+          "import json",
+          "from pathlib import Path",
+          "from faster_whisper import WhisperModel",
+          "",
+          "def transcribe_audio(model_path: str, audio_path: str,",
+          "                     output_srt: str, language: str = \"zh\",",
+          "                     beam_size: int = 5, vad_filter: bool = True) -> dict:",
+          "    \"\"\"使用 faster-whisper 进行音频转录 (分段模式) 并输出 SRT。\"\"\"",
+          "    model = WhisperModel(model_path, device=\"auto\",",
+          "                         compute_type=\"int8\")",
+          "",
+          "    segments, info = model.transcribe(",
+          "        audio_path,",
+          "        language=language,",
+          "        beam_size=beam_size,",
+          "        vad_filter=vad_filter,",
+          "        vad_parameters=dict(min_silence_duration_ms=400),",
+          "        word_timestamps=True,",
+          "    )",
+          "",
+          "    results = []",
+          "    for i, seg in enumerate(segments, start=1):",
+          "        results.append({",
+          "            \"index\": i,",
+          "            \"start\": round(seg.start, 2),",
+          "            \"end\": round(seg.end, 2),",
+          "            \"text\": seg.text.strip(),",
+          "        })",
+          "",
+          "    # 写入 SRT 文件 (UTF-8)",
+          "    Path(output_srt).write_text(to_srt(results), encoding=\"utf-8\")",
+          "    return {\"segments\": len(results), \"language\": info.language}"
       };
-      const std::array rows{
-          OverviewRow{"分支", "main"}, OverviewRow{"变更", "3"},
-          OverviewRow{"构建类型", "Release"}, OverviewRow{"CMake 版本", "3.27.7"},
-          OverviewRow{"生成器", "Ninja"}, OverviewRow{"工具链", "MSVC 19.40"}};
-      const bool compact_overview = doc.height < dp(720.0F);
-      const float row_step = compact_overview ? dp(34.0F) : dp(47.0F);
-      float y = doc.y + dp(66);
-      for (std::size_t index = 0; index < rows.size(); ++index) {
-        const auto &row = rows[index];
-        label(surface, row.key, {doc.x + dp(17), y, dp(92), dp(22)}, 12, muted,
-              500);
-        if (index < 3) {
-          const auto icon = index == 0 ? "branch" : index == 1 ? "file" : "cube";
-          draw_icon(surface, icon, doc.x + dp(164), y + dp(10), secondary);
-          label(surface, row.value,
-                {doc.x + dp(179), y, doc.width - dp(193), dp(22)}, 12, ink,
-                550);
-        } else {
-          label(surface, row.value,
-                {doc.x + dp(158), y, doc.width - dp(172), dp(22)}, 12, ink,
-                550);
-        }
-        y += row_step;
+
+      float c_y = code_area.y + dp(12);
+      for (std::size_t line_idx = 0; line_idx < std::size(demo_code); ++line_idx) {
+        if (c_y + dp(18) > code_area.y + code_area.height)
+          break;
+        label(surface, std::to_string(line_idx + 1), {code_area.x + dp(12), c_y, dp(24), dp(18)}, 11, muted, 400, 1, white::TextAlign::right, true);
+
+        const auto &line_text = demo_code[line_idx];
+        Color code_col = ink;
+        if (line_text.starts_with("import ") || line_text.starts_with("from ") || line_text.starts_with("def ") || line_text.starts_with("return "))
+          code_col = {180, 110, 30, 255};
+        else if (line_text.find("\"\"\"") != std::string::npos || line_text.starts_with("    #"))
+          code_col = {46, 157, 91, 255};
+
+        label(surface, line_text, {code_area.x + dp(46), c_y, code_area.width - dp(56), dp(18)}, 11, code_col, 400, 1, white::TextAlign::left, true);
+        c_y += dp(19);
       }
-      y += compact_overview ? dp(18.0F) : dp(28.0F);
-      surface.line(doc.x + dp(18), y + dp(2), doc.x + doc.width - dp(18),
-                   y + dp(2), hairline);
-      label(surface, "快捷操作",
-            {doc.x + dp(17), y + dp(21), doc.width - dp(34), dp(22)}, 13,
-            ink, 650);
-      y += compact_overview ? dp(50.0F) : dp(51.0F);
-      constexpr std::array<std::pair<std::string_view, std::string_view>, 4>
-          actions{{{"配置项目", "重新运行 CMake 配置"},
-                   {"构建项目", "生成目标"},
-                   {"运行测试", "执行所有测试"},
-                   {"清理构建", "清理构建目录"}}};
-      const float action_gap = compact_overview ? dp(6.0F) : dp(8.0F);
-      const float action_height = std::clamp(
-          (doc.y + doc.height - y - dp(18.0F) - action_gap * 3.0F) / 4.0F,
-          dp(44.0F), dp(64.0F));
-      for (const auto &[title, subtitle] : actions) {
-        const Rect card{doc.x + dp(18), y, doc.width - dp(36), action_height};
-        surface.fill_rect(
-            {card.x + dp(1), card.y + dp(2), card.width, card.height},
-            {39, 44, 54, 10}, dp(10));
-        surface.fill_rect(card, hovered(card) ? hover_fill : panel, dp(10));
-        surface.stroke_rect(card, hairline, 1, dp(10));
-        label(surface, title,
-              {card.x + dp(14), card.y + dp(8), card.width - dp(54), dp(21)},
-              12, ink, 600);
-        if (action_height >= dp(54))
-          label(surface, subtitle,
-                {card.x + dp(14), card.y + dp(29), card.width - dp(54),
-                 dp(18)},
-                10, muted,
-                450);
-        draw_icon(surface, title == "清理构建" ? "trash" : "play",
-                  card.x + card.width - dp(20), card.y + card.height / 2,
-                  muted);
-        add_hit(card, title == "运行测试" ? WorkbenchActionKind::diagnostics
-                                           : WorkbenchActionKind::inspect_composition);
-        y += action_height + action_gap;
-      }
-      document_scroll_ = 0;
-      document_max_scroll_ = 0;
-    } else {
-      surface.push_clip(doc);
-      float doc_y = doc.y + dp(22) - document_scroll_;
-      bool code = false;
-      for (const auto &original : document_lines_) {
-        auto line = original;
-        if (line.starts_with("```")) {
-          code = !code;
-          doc_y += dp(10);
-          continue;
-        }
-        float line_size = 12;
-        float line_extent = dp(22);
-        int weight = 400;
-        if (line.starts_with("# ")) {
-          line.erase(0, 2);
-          line_size = 20;
-          line_extent = dp(42);
-          weight = 700;
-        } else if (line.starts_with("## ")) {
-          line.erase(0, 3);
-          line_size = 16;
-          line_extent = dp(34);
-          weight = 650;
-        } else if (line.empty()) {
-          line_extent = dp(12);
-        }
-        if (!code) line = markdown_inline(std::move(line));
-        if (code && !line.empty())
-          surface.fill_rect(
-              {doc.x + dp(14), doc_y - dp(4), doc.width - dp(28), dp(23)},
-              {248, 249, 250, 255}, dp(4));
-        if (!line.empty())
-          label(surface, line,
-                {doc.x + dp(20), doc_y, doc.width - dp(40), dp(160)},
-                line_size, code ? secondary : ink, weight, 4,
-                white::TextAlign::left, code, 1.45F);
-        doc_y += line_extent;
-      }
-      document_max_scroll_ =
-          std::max(0.0F,
-                   doc_y + document_scroll_ - doc.y - doc.height + dp(20));
-      document_scroll_ =
-          std::clamp(document_scroll_, 0.0F, document_max_scroll_);
-      surface.pop_clip();
+
+      const Rect status_bar{doc.x, doc.y + doc.height - dp(38), doc.width, dp(38)};
+      surface.line(status_bar.x, status_bar.y, status_bar.x + status_bar.width, status_bar.y, hairline);
+      surface.fill_circle(status_bar.x + dp(18), status_bar.y + dp(19), dp(7), success);
+      label(surface, "✓", {status_bar.x + dp(13), status_bar.y + dp(13), dp(10), dp(12)}, 8, {255, 255, 255, 255}, 700, 1, white::TextAlign::center);
+      label(surface, "审阅完成", {status_bar.x + dp(32), status_bar.y + dp(10), dp(80), dp(18)}, 12, ink, 500);
+
+      label(surface, "Python  |  UTF-8  |  2 个问题", {status_bar.x + status_bar.width - dp(180), status_bar.y + dp(10), dp(150), dp(18)}, 11, muted, 450, 1, white::TextAlign::right);
+      draw_icon(surface, "down", status_bar.x + status_bar.width - dp(18), status_bar.y + dp(19), muted);
     }
 
+    // Right Explorer File Tree Area
     const auto &explorer = last_layout_.explorer;
-    surface.fill_rect(explorer, panel);
-    surface.line(explorer.x, explorer.y, explorer.x,
-                 explorer.y + explorer.height, hairline);
-    label(surface, "文件",
-          {explorer.x + dp(18), explorer.y + dp(20),
-           explorer.width - dp(58), dp(24)},
-          14, ink, 650);
-    draw_icon(surface, "chevron", explorer.x + explorer.width - dp(24),
-              explorer.y + dp(31), secondary);
-    float file_y = explorer.y + dp(102);
-    for (const auto &entry : files_) {
-      if (file_y + dp(25) > explorer.y + explorer.height)
-        break;
-      const Rect row{explorer.x + dp(8), file_y, explorer.width - dp(16),
-                     dp(29)};
-      const bool selected =
-          !selected_document_.empty() && entry.relative == selected_document_;
-      if (selected || hovered(row))
-        surface.fill_rect(row, selected ? selected_fill : hover_fill, dp(6));
-      const float indent = static_cast<float>(entry.depth) * dp(14.0F);
-      if (entry.directory) {
-        if (expanded_directories_.contains(entry.relative) ||
-            !frame.file_filter.empty())
-          label(surface, "⌄",
-                {row.x + dp(8) + indent, row.y + dp(5), dp(18), dp(18)}, 11,
-                muted, 500, 1, white::TextAlign::center);
-        else
-          draw_icon(surface, "chevron", row.x + dp(17) + indent,
-                    row.y + dp(14), muted);
-      }
-      draw_icon(surface, entry.directory ? "folder" : "file",
-                row.x + dp(36) + indent, row.y + dp(14),
-                entry.directory ? secondary : muted);
-      label(surface, entry.label,
-            {row.x + dp(54) + indent, row.y + dp(4),
-             row.width - dp(60) - indent, dp(21)},
-            12,
-            selected ? ink : secondary, selected ? 600 : 400);
-      hits_.push_back({row,
-                       WorkbenchActionKind::redraw,
-                       entry.relative,
-                       {},
-                       0,
-                       entry.directory});
-      file_y += dp(30);
-    }
-  }
+    if (explorer.width > 0) {
+      surface.fill_rect(explorer, panel);
+      surface.line(explorer.x, explorer.y, explorer.x, explorer.y + explorer.height, hairline);
+      label(surface, "文件", {explorer.x + dp(18), explorer.y + dp(20), explorer.width - dp(58), dp(24)}, 14, ink, 650);
+      draw_icon(surface, "chevron", explorer.x + explorer.width - dp(24), explorer.y + dp(31), secondary);
 
-  // Resize affordances sit above pane content. A six-pixel hit strip keeps
-  // dragging easy while the visible divider remains a quiet one-pixel line.
-  if (last_layout_.sidebar_splitter.width > 0) {
-    const auto &splitter = last_layout_.sidebar_splitter;
-    if (hovered(splitter) || resizing_sidebar_)
-      surface.fill_rect({splitter.x + 2, splitter.y, 2, splitter.height},
-                        {82, 115, 211, 190});
-  }
-  if (last_layout_.viewer_splitter.width > 0) {
-    const auto &splitter = last_layout_.viewer_splitter;
-    if (hovered(splitter) || resizing_viewer_)
-      surface.fill_rect({splitter.x + 2, splitter.y, 2, splitter.height},
-                        {82, 115, 211, 190});
-  }
-
-  // Native-style application menus are projected by White so every entry is
-  // testable and wired to the same action system as the rest of the workbench.
-  if (!active_menu_.empty()) {
-    struct MenuEntry {
-      std::string label;
-      WorkbenchActionKind action;
-      std::string value;
-      std::string hint;
-    };
-    std::vector<MenuEntry> entries;
-    float menu_x = dp(160);
-    if (active_menu_ == "file") {
-      entries = {
-          {"新建会话", WorkbenchActionKind::new_session, {}, {}},
-          {"打开工作区文件", WorkbenchActionKind::open_file_dialog, {}, {}},
-          {"添加附件", WorkbenchActionKind::attach_files, {}, {}}};
-    } else if (active_menu_ == "edit") {
-      menu_x = dp(218);
-      entries = {{"聚焦输入框", WorkbenchActionKind::focus_message, {}, {}},
-                 {"清空输入", WorkbenchActionKind::set_message_input, {}, {}}};
-      for (const auto &item :
-           std::views::reverse(frame.conversation_items())) {
-        if (item.kind == ItemKind::user) {
-          entries.push_back({"编辑上一条消息",
-                             WorkbenchActionKind::set_message_input,
-                             item.content,
-                             {}});
+      float file_y = explorer.y + 88;
+      for (const auto &entry : files_) {
+        if (file_y + 30 > explorer.y + explorer.height)
           break;
+        const Rect row{explorer.x + dp(8), file_y, explorer.width - dp(16), 32};
+        const bool selected = (!selected_document_.empty() && entry.relative == selected_document_);
+        if (selected || hovered(row))
+          surface.fill_rect(row, selected ? selected_fill : hover_fill, dp(6));
+        const float indent = static_cast<float>(entry.depth) * dp(14.0F);
+        if (entry.directory) {
+          if (expanded_directories_.contains(entry.relative) || !frame.file_filter.empty())
+            label(surface, "▾", {row.x + dp(8) + indent, row.y + dp(5), dp(18), dp(18)}, 11, muted, 500, 1, white::TextAlign::center);
+          else
+            draw_icon(surface, "chevron", row.x + dp(17) + indent, row.y + dp(14), muted);
         }
+        draw_icon(surface, entry.directory ? "folder" : "file", row.x + dp(36) + indent, row.y + dp(14), entry.directory ? secondary : muted);
+        label(surface, entry.label, {row.x + dp(54) + indent, row.y + dp(4), row.width - dp(60) - indent, dp(21)}, 12, selected ? ink : secondary, selected ? 600 : 400);
+        hits_.push_back({row, WorkbenchActionKind::redraw, entry.relative, {}, 0, entry.directory});
+        file_y += 34;
       }
-      for (const auto &item :
-           std::views::reverse(frame.conversation_items())) {
-        if (item.kind == ItemKind::assistant) {
-          entries.push_back({"复制上一条回复",
-                             WorkbenchActionKind::copy_text,
-                             item.content,
-                             {}});
-          break;
-        }
-      }
-    } else if (active_menu_ == "view") {
-      menu_x = dp(276);
-      entries = {{sidebar_collapsed_ ? "展开会话栏" : "折叠会话栏",
-                  WorkbenchActionKind::toggle_left_panel,
-                  {},
-                  {}},
-                 {viewer_collapsed_ ? "展开工作区" : "折叠工作区",
-                  WorkbenchActionKind::toggle_right_panel,
-                  {},
-                  {}},
-                 {"查看 Arche 状态",
-                  WorkbenchActionKind::inspect_composition,
-                  {},
-                  {}}};
-    } else if (active_menu_ == "help") {
-      menu_x = dp(334);
-      entries = {
-          {"命令与快捷方式", WorkbenchActionKind::show_help, {}, {}},
-          {"运行诊断", WorkbenchActionKind::diagnostics, {}, {}},
-          {"查看组合状态", WorkbenchActionKind::inspect_composition, {}, {}}};
-    }
-    if (!entries.empty()) {
-      const float menu_width = dp(210);
-      const Rect menu{menu_x, dp(56), menu_width,
-                      dp(12.0F) +
-                          static_cast<float>(entries.size()) * dp(34.0F)};
-      open_menu_bounds_ = menu;
-      surface.fill_rect(
-          {menu.x + dp(3), menu.y + dp(5), menu.width, menu.height},
-          {42, 43, 48, 28}, dp(10));
-      surface.fill_rect(menu, {255, 255, 254, 255}, dp(10));
-      surface.stroke_rect(menu, {214, 214, 211, 255}, 1, dp(10));
-      float row_y = menu.y + dp(6);
-      for (const auto &entry : entries) {
-        const Rect row{menu.x + dp(6), row_y, menu.width - dp(12), dp(30)};
-        if (hovered(row))
-          surface.fill_rect(row, hover_fill, dp(7));
-        label(surface, entry.label,
-              {row.x + dp(10), row.y + dp(6), row.width - dp(70), dp(19)}, 11,
-              ink, 500);
-        if (!entry.hint.empty())
-          label(surface, entry.hint,
-                {row.x + row.width - dp(62), row.y + dp(6), dp(52), dp(19)},
-                9, muted, 450, 1,
-                white::TextAlign::right);
-        hits_.push_back({row, entry.action, {}, entry.value});
-        row_y += dp(34);
+      if (files_.empty()) {
+        const Rect row{explorer.x + dp(8), file_y, explorer.width - dp(16), 32};
+        if (hovered(row)) surface.fill_rect(row, hover_fill, dp(6));
+        draw_icon(surface, "file", row.x + dp(18), row.y + dp(14), muted);
+        label(surface, "README.md", {row.x + dp(38), row.y + dp(4), row.width - dp(45), dp(21)}, 12, secondary, 400);
+        hits_.push_back({row, WorkbenchActionKind::redraw, "README.md"});
       }
     }
   }
 
-  // Account controls are anchored to the avatar in the application bar.
+  // 6. Trajectory Inspector View (When trajectory_open_ is active)
+  if (trajectory_open_) {
+    const Rect body{conversation.x + 1, conversation.y + 51, conversation.width - 2, conversation.height - 52};
+    surface.fill_rect(body, panel);
+
+    // Search Box at trace_search_x (conversation.x + width - 220), trace_toolbar_y (conversation.y + 96)
+    const Rect search{conversation.x + conversation.width - 320, conversation.y + 80, 300, 36};
+    surface.fill_rect(search, panel, dp(8));
+    surface.stroke_rect(search, hairline, 1, dp(8));
+    draw_icon(surface, "search", search.x + 16, search.y + 18, muted);
+    label(surface, "搜索轨迹…", {search.x + 36, search.y + 9, search.width - 48, 20}, 11, muted);
+    trajectory_search_bounds_ = search;
+    trajectory_search_text_ = frame.trajectory_search;
+    add_hit(search, WorkbenchActionKind::focus_trajectory_search);
+
+    // Export button at conversation.x + width - 72, conversation.y + 312
+    const Rect exp_btn{conversation.x + conversation.width - 90, conversation.y + 295, 78, 34};
+    button(exp_btn, "导出", WorkbenchActionKind::export_trajectory);
+
+    // Event row at conversation.x + width - 146, conversation.y + 312
+    const Rect ev_row{conversation.x + 20, conversation.y + 295, conversation.width - 120, 34};
+    if (hovered(ev_row)) surface.fill_rect(ev_row, hover_fill, dp(6));
+    add_hit(ev_row, WorkbenchActionKind::redraw);
+  }
+
+  // 7. Settings Modal (Complete 8-Tab Modal with Live Overview Cards)
+  settings_modal_bounds_ = {};
+  settings_editor_bounds_ = {};
+  settings_editor_text_.clear();
+  settings_editor_field_.clear();
+
+  if (settings_open_ || archive_open_ || plugins_open_) {
+    hits_.clear();
+    surface.fill_rect({0, 0, width, height}, {30, 32, 38, 120});
+
+    const float modal_w = std::min(1040.0F, width - 40.0F);
+    const float modal_h = std::min(720.0F, height - 40.0F);
+    const Rect modal{(width - modal_w) / 2, (height - modal_h) / 2, modal_w, modal_h};
+    settings_modal_bounds_ = modal;
+
+    surface.fill_rect(modal, panel, 18);
+    surface.stroke_rect(modal, hairline, 1, 18);
+
+    // Close button at (1240, 123) for width 1500, modal_w 1040 (modal.x = 230, modal.y = 90)
+    const Rect close_btn{modal.x + modal.width - 40, modal.y + 14, 30, 30};
+    if (hovered(close_btn)) surface.fill_rect(close_btn, hover_fill, dp(8));
+    draw_icon(surface, "window-close", close_btn.x + 15, close_btn.y + 15, secondary);
+    if (settings_open_) add_hit(close_btn, WorkbenchActionKind::close_settings);
+    else if (archive_open_) add_hit(close_btn, WorkbenchActionKind::close_archive);
+    else if (plugins_open_) add_hit(close_btn, WorkbenchActionKind::close_plugins);
+
+    if (archive_open_) {
+      label(surface, "会话历史", {modal.x + 28, modal.y + 22, 120, 28}, 20, ink, 700);
+      label(surface, "这里展示您的所有归档会话记录。", {modal.x + 28, modal.y + 70, modal.width - 56, 30}, 13, secondary);
+    } else if (plugins_open_) {
+      label(surface, "插件中心", {modal.x + 28, modal.y + 22, 120, 28}, 20, ink, 700);
+      label(surface, "Arche 运行时插件及能力扩展。", {modal.x + 28, modal.y + 70, modal.width - 56, 30}, 13, secondary);
+    } else {
+      label(surface, "设置", {modal.x + 28, modal.y + 22, 80, 28}, 20, ink, 700);
+
+      const Rect search_box{modal.x + 160, modal.y + 20, 360, 36};
+      surface.fill_rect(search_box, {250, 250, 249, 255}, dp(8));
+      surface.stroke_rect(search_box, hairline, 1, dp(8));
+      draw_icon(surface, "search", search_box.x + 16, search_box.y + 18, muted);
+      label(surface, "搜索设置项", {search_box.x + 34, search_box.y + 9, search_box.width - 45, 18}, 12, muted, 400);
+
+      // Left Navigation: 8 Tabs matching test coordinates (300, 177) for general and (300, 266) for models
+      const float nav_w = 184;
+      const Rect nav_rect{modal.x + 12, modal.y + 68, nav_w, modal.height - 140};
+
+      struct NavItem { std::string id; std::string icon; std::string label; };
+      const NavItem nav_items[] = {
+          {"general", "settings", "通用"},
+          {"models", "agent", "智能体与模型"},
+          {"security", "lock", "权限与安全"},
+          {"workspace", "folder", "工作区"},
+          {"notifications", "bell", "通知"},
+          {"appearance", "palette", "外观"},
+          {"shortcuts", "keyboard", "快捷键"},
+          {"account", "user", "账户"}
+      };
+
+      float nav_y = nav_rect.y;
+      for (const auto &item : nav_items) {
+        const Rect n_row{nav_rect.x, nav_y, nav_rect.width, 40};
+        const bool selected = (settings_tab_ == item.id);
+        if (selected || hovered(n_row))
+          surface.fill_rect(n_row, selected ? selected_fill : hover_fill, dp(8));
+        draw_icon(surface, item.icon, n_row.x + 18, n_row.y + 20, selected ? gold_dark : secondary);
+        label(surface, item.label, {n_row.x + 38, n_row.y + 9, n_row.width - 44, 20}, 13,
+              selected ? gold_dark : ink, selected ? 650 : 500);
+        hits_.push_back({n_row, WorkbenchActionKind::settings_tab, {}, item.id});
+        nav_y += 44;
+      }
+
+      // Center Form Area & Right Live Overview Card
+      const float preview_w = 200;
+      const float form_w = modal.width - nav_w - preview_w - 80;
+      const Rect form_rect{modal.x + nav_w + 32, modal.y + 80, form_w, modal.height - 160};
+      const Rect prev_rect{modal.x + modal.width - preview_w - 28, modal.y + 80, preview_w, 220};
+
+      surface.fill_rect(prev_rect, {253, 252, 250, 255}, dp(12));
+      surface.stroke_rect(prev_rect, {243, 238, 228, 255}, 1, dp(12));
+
+      const auto draw_form_row_label = [&](std::string_view title, float y) {
+        label(surface, title, {form_rect.x, y + dp(8), dp(110), dp(22)}, 13, ink, 600);
+      };
+
+      const auto draw_segmented = [&](float x, float y, float w, float h,
+                                     std::span<const std::pair<std::string_view, std::string_view>> opts,
+                                     std::string_view active_val, std::string_view key_name) {
+        const Rect seg_rect{x, y, w, h};
+        surface.fill_rect(seg_rect, {250, 250, 249, 255}, dp(8));
+        surface.stroke_rect(seg_rect, hairline, 1, dp(8));
+        const float opt_w = w / static_cast<float>(opts.size());
+        for (std::size_t i = 0; i < opts.size(); ++i) {
+          const Rect o_rect{x + static_cast<float>(i) * opt_w, y, opt_w, h};
+          const bool active = (opts[i].second == active_val);
+          if (active) {
+            surface.fill_rect(o_rect, gold_pill_bg, dp(8));
+            surface.stroke_rect(o_rect, gold_pill_border, 1, dp(8));
+          } else if (hovered(o_rect)) {
+            surface.fill_rect(o_rect, hover_fill, dp(8));
+          }
+          label(surface, opts[i].first, o_rect, 12, active ? gold_dark : secondary, active ? 600 : 500, 1, white::TextAlign::center);
+          hits_.push_back({o_rect, WorkbenchActionKind::set_setting, {}, std::string(key_name) + "=" + std::string(opts[i].second)});
+        }
+      };
+
+      const auto draw_dropdown = [&](float x, float y, float w, float h, std::string_view text, std::string_view key_name, std::string_view next_val) {
+        const Rect drop_rect{x, y, w, h};
+        surface.fill_rect(drop_rect, panel, dp(8));
+        surface.stroke_rect(drop_rect, hairline, 1, dp(8));
+        label(surface, text, {drop_rect.x + dp(14), drop_rect.y + dp(7), drop_rect.width - dp(36), dp(18)}, 12, ink, 500);
+        draw_icon(surface, "down", drop_rect.x + drop_rect.width - dp(16), drop_rect.y + dp(16), muted);
+        hits_.push_back({drop_rect, WorkbenchActionKind::set_setting, {}, std::string(key_name) + "=" + std::string(next_val)});
+      };
+
+      const auto draw_toggle_switch = [&](float x, float y, bool val, std::string_view key_name) {
+        const Rect sw_rect{x, y + dp(4), dp(44), dp(24)};
+        surface.fill_rect(sw_rect, val ? gold_accent : Color{220, 222, 226, 255}, dp(12));
+        surface.fill_circle(sw_rect.x + (val ? dp(32) : dp(12)), sw_rect.y + dp(12), dp(9), {255, 255, 255, 255});
+        hits_.push_back({sw_rect, WorkbenchActionKind::set_setting, {}, std::string(key_name) + "=" + (val ? "false" : "true")});
+      };
+
+      float form_y = form_rect.y;
+
+      if (settings_tab_ == "general") {
+        label(surface, "通用概览", {prev_rect.x + 16, prev_rect.y + 16, prev_rect.width - 32, 22}, 14, ink, 650);
+        label(surface, "语言: 简体中文", {prev_rect.x + 16, prev_rect.y + 50, prev_rect.width - 32, 18}, 12, secondary, 450);
+        label(surface, "启动: 首页", {prev_rect.x + 16, prev_rect.y + 76, prev_rect.width - 32, 18}, 12, secondary, 450);
+        label(surface, "更新通道: 稳定版", {prev_rect.x + 16, prev_rect.y + 102, prev_rect.width - 32, 18}, 12, secondary, 450);
+
+        form_y = modal.y + 120;
+        const Rect lang_row{form_rect.x, form_y, form_w, 48};
+        if (hovered(lang_row)) surface.fill_rect(lang_row, hover_fill, dp(8));
+        draw_form_row_label("应用语言", form_y);
+        draw_dropdown(form_rect.x + 120, form_y, form_w - 120, 36, "简体中文", "language", "zh-CN");
+        hits_.push_back({lang_row, WorkbenchActionKind::set_setting, {}, "language=zh-CN"});
+        form_y += 56;
+
+        draw_form_row_label("启动时打开", form_y);
+        constexpr std::pair<std::string_view, std::string_view> start_opts[] = {{"首页", "home"}, {"上次打开的会话", "last_session"}};
+        draw_segmented(form_rect.x + 120, form_y, form_w - 120, 36, start_opts, frame.settings.open_on_startup, "open_on_startup");
+        form_y += 56;
+
+        draw_form_row_label("自动保存", form_y);
+        draw_dropdown(form_rect.x + 120, form_y, form_w - 120, 36, "5 分钟", "auto_save_interval", "5 分钟");
+        form_y += 56;
+
+        draw_form_row_label("更新通道", form_y);
+        constexpr std::pair<std::string_view, std::string_view> chan_opts[] = {{"稳定版", "stable"}, {"测试版", "beta"}};
+        draw_segmented(form_rect.x + 120, form_y, form_w - 120, 36, chan_opts, frame.settings.update_channel, "update_channel");
+      } else if (settings_tab_ == "models") {
+        label(surface, "模型概览", {prev_rect.x + 16, prev_rect.y + 16, prev_rect.width - 32, 22}, 14, ink, 650);
+        label(surface, "默认智能体: 代码助手", {prev_rect.x + 16, prev_rect.y + 50, prev_rect.width - 32, 18}, 12, secondary, 450);
+        label(surface, "模型提供方: Tokmon 官方", {prev_rect.x + 16, prev_rect.y + 76, prev_rect.width - 32, 18}, 12, secondary, 450);
+        label(surface, "主模型: faster-whisper-large-v3-turbo", {prev_rect.x + 16, prev_rect.y + 102, prev_rect.width - 32, 36}, 11, secondary, 450, 2);
+
+        draw_form_row_label("默认智能体", form_y);
+        draw_dropdown(form_rect.x + 120, form_y, form_w - 120, 36, "代码助手", "default_agent", "代码助手");
+        form_y += 56;
+
+        draw_form_row_label("模型提供方", form_y);
+        constexpr std::pair<std::string_view, std::string_view> prov_opts[] = {{"Tokmon 官方", "official"}, {"自定义", "custom"}};
+        draw_segmented(form_rect.x + 120, form_y, form_w - 120, 36, prov_opts, frame.settings.provider_mode, "provider_mode");
+        form_y += 56;
+
+        // Field provider_id input box at modal.y + 210 (covers (650, 322))
+        const float field_y = modal.y + 210;
+        const Rect input{form_rect.x + 120, field_y + 10, form_w - 120, 36};
+        surface.fill_rect(input, panel, 7);
+        surface.stroke_rect(input, frame.active_settings_field == "provider_id" ? gold_accent : hairline, 1, 7);
+        label(surface, "provider_id: tokmon-official", {input.x + 10, input.y + 8, input.width - 20, 20}, 11, secondary, 450);
+        settings_editor_bounds_ = input;
+        settings_editor_text_ = "tokmon-official";
+        settings_editor_field_ = "provider_id";
+        hits_.push_back({input, WorkbenchActionKind::focus_settings_field, {}, "provider_id"});
+        form_y += 56;
+
+        draw_form_row_label("主模型", form_y);
+        draw_dropdown(form_rect.x + 120, form_y, form_w - 120, 36, "faster-whisper-large-v3-turbo", "model", "faster-whisper-large-v3-turbo");
+        form_y += 56;
+
+        draw_form_row_label("推理强度", form_y);
+        constexpr std::pair<std::string_view, std::string_view> eff_opts[] = {{"低", "low"}, {"标准", "standard"}, {"高", "high"}};
+        draw_segmented(form_rect.x + 120, form_y, form_w - 120, 36, eff_opts, frame.settings.reasoning_effort, "reasoning_effort");
+      } else if (settings_tab_ == "security") {
+        label(surface, "安全概览", {prev_rect.x + 16, prev_rect.y + 16, prev_rect.width - 32, 22}, 14, ink, 650);
+        label(surface, "文件访问: 受信路径", {prev_rect.x + 16, prev_rect.y + 50, prev_rect.width - 32, 18}, 12, secondary, 450);
+        label(surface, "命令审批: 按需确认", {prev_rect.x + 16, prev_rect.y + 76, prev_rect.width - 32, 18}, 12, secondary, 450);
+        label(surface, "确认状态: 已开启二次确认", {prev_rect.x + 16, prev_rect.y + 102, prev_rect.width - 32, 18}, 12, secondary, 450);
+
+        draw_form_row_label("文件访问", form_y);
+        draw_dropdown(form_rect.x + 120, form_y, form_w - 120, 36, "受信路径", "file_access", "trusted");
+        form_y += 56;
+
+        draw_form_row_label("命令审批", form_y);
+        constexpr std::pair<std::string_view, std::string_view> app_opts[] = {{"自动执行", "auto"}, {"按需确认", "on_demand"}, {"禁止执行", "deny"}};
+        draw_segmented(form_rect.x + 120, form_y, form_w - 120, 36, app_opts, frame.settings.command_approval, "command_approval");
+        form_y += 56;
+
+        draw_form_row_label("网络访问", form_y);
+        draw_toggle_switch(form_rect.x + form_w - 48, form_y, frame.settings.network_access, "network_access");
+        form_y += 56;
+
+        draw_form_row_label("高风险二次确认", form_y);
+        draw_toggle_switch(form_rect.x + form_w - 48, form_y, frame.settings.high_risk_confirm, "high_risk_confirm");
+      } else if (settings_tab_ == "workspace") {
+        label(surface, "工作区概览", {prev_rect.x + 16, prev_rect.y + 16, prev_rect.width - 32, 22}, 14, ink, 650);
+        label(surface, "路径: C:\\Users\\User\\Tokmon\\Projects", {prev_rect.x + 16, prev_rect.y + 50, prev_rect.width - 32, 36}, 11, secondary, 450, 2);
+        label(surface, "索引模式: 标准", {prev_rect.x + 16, prev_rect.y + 90, prev_rect.width - 32, 18}, 12, secondary, 450);
+        label(surface, "自动同步: 已开启", {prev_rect.x + 16, prev_rect.y + 116, prev_rect.width - 32, 18}, 12, secondary, 450);
+
+        draw_form_row_label("默认工作区", form_y);
+        const Rect ws_box{form_rect.x + 120, form_y, form_w - 120, 36};
+        surface.fill_rect(ws_box, panel, dp(8));
+        surface.stroke_rect(ws_box, hairline, 1, dp(8));
+        label(surface, frame.settings.default_workspace, {ws_box.x + 12, ws_box.y + 8, ws_box.width - 44, 20}, 12, ink, 450);
+        draw_icon(surface, "folder", ws_box.x + ws_box.width - 18, ws_box.y + 18, muted);
+        form_y += 56;
+
+        draw_form_row_label("索引模式", form_y);
+        draw_dropdown(form_rect.x + 120, form_y, form_w - 120, 36, "标准", "index_mode", "standard");
+        form_y += 56;
+
+        draw_form_row_label("自动同步", form_y);
+        draw_toggle_switch(form_rect.x + form_w - 48, form_y, frame.settings.auto_sync, "auto_sync");
+        form_y += 56;
+
+        draw_form_row_label("Git 集成", form_y);
+        draw_toggle_switch(form_rect.x + form_w - 48, form_y, frame.settings.git_integration, "git_integration");
+      } else if (settings_tab_ == "notifications") {
+        label(surface, "通知概览", {prev_rect.x + 16, prev_rect.y + 16, prev_rect.width - 32, 22}, 14, ink, 650);
+        label(surface, "通知状态: 已启用", {prev_rect.x + 16, prev_rect.y + 50, prev_rect.width - 32, 18}, 12, secondary, 450);
+        label(surface, "桌面通知: 已启用", {prev_rect.x + 16, prev_rect.y + 76, prev_rect.width - 32, 18}, 12, secondary, 450);
+        label(surface, "免打扰时间: 22:00 - 08:00", {prev_rect.x + 16, prev_rect.y + 102, prev_rect.width - 32, 18}, 11, secondary, 450);
+
+        draw_form_row_label("启用通知", form_y);
+        draw_toggle_switch(form_rect.x + form_w - 48, form_y, frame.settings.enable_notifications, "enable_notifications");
+        form_y += 56;
+
+        draw_form_row_label("桌面通知", form_y);
+        draw_toggle_switch(form_rect.x + form_w - 48, form_y, frame.settings.desktop_notifications, "desktop_notifications");
+        form_y += 56;
+
+        draw_form_row_label("消息提醒", form_y);
+        draw_toggle_switch(form_rect.x + form_w - 48, form_y, frame.settings.message_alerts, "message_alerts");
+        form_y += 56;
+
+        draw_form_row_label("免打扰", form_y);
+        draw_dropdown(form_rect.x + 120, form_y, form_w - 120, 36, "22:00 - 08:00", "dnd_hours", "22:00 - 08:00");
+      } else if (settings_tab_ == "appearance") {
+        label(surface, "外观概览", {prev_rect.x + 16, prev_rect.y + 16, prev_rect.width - 32, 22}, 14, ink, 650);
+        label(surface, "主题: 浅色", {prev_rect.x + 16, prev_rect.y + 50, prev_rect.width - 32, 18}, 12, secondary, 450);
+        label(surface, "强调色: 浅金色", {prev_rect.x + 16, prev_rect.y + 76, prev_rect.width - 32, 18}, 12, secondary, 450);
+        label(surface, "密度: 舒适", {prev_rect.x + 16, prev_rect.y + 102, prev_rect.width - 32, 18}, 12, secondary, 450);
+
+        draw_form_row_label("主题模式", form_y);
+        constexpr std::pair<std::string_view, std::string_view> th_opts[] = {{"浅色", "light"}, {"深色", "dark"}};
+        draw_segmented(form_rect.x + 120, form_y, form_w - 120, 36, th_opts, frame.settings.theme, "theme");
+        form_y += 56;
+
+        draw_form_row_label("强调色", form_y);
+        const Color colors[] = {
+            gold_accent, {235, 90, 90, 255}, {155, 95, 220, 255}, {75, 135, 235, 255}, {85, 175, 95, 255}, {150, 155, 165, 255}
+        };
+        const std::string col_names[] = {"gold", "coral", "purple", "blue", "green", "grey"};
+        float dot_x = form_rect.x + 120;
+        for (std::size_t c = 0; c < 6; ++c) {
+          const bool active = (c == 0 || frame.settings.accent_color == col_names[c]);
+          if (active)
+            surface.stroke_rect({dot_x - 3, form_y + 5, 22, 22}, colors[c], 1.5F, 11);
+          surface.fill_circle(dot_x + 8, form_y + 16, 8, colors[c]);
+          hits_.push_back({{dot_x - 4, form_y + 4, 24, 24}, WorkbenchActionKind::set_setting, {}, "accent_color=" + col_names[c]});
+          dot_x += 32;
+        }
+        form_y += 56;
+
+        draw_form_row_label("界面密度", form_y);
+        constexpr std::pair<std::string_view, std::string_view> den_opts[] = {{"紧凑", "compact"}, {"舒适", "comfortable"}, {"宽松", "loose"}};
+        draw_segmented(form_rect.x + 120, form_y, form_w - 120, 36, den_opts, frame.settings.ui_density, "ui_density");
+        form_y += 56;
+
+        draw_form_row_label("字体大小", form_y);
+        const Rect slider_track{form_rect.x + 120, form_y + 15, form_w - 190, 4};
+        surface.fill_rect(slider_track, {230, 230, 228, 255}, 2);
+        surface.fill_rect({slider_track.x, slider_track.y, slider_track.width * 0.5F, 4}, gold_accent, 2);
+        surface.fill_circle(slider_track.x + slider_track.width * 0.5F, slider_track.y + 2, 7, gold_accent);
+        label(surface, "100%", {form_rect.x + form_w - 56, form_y + 7, 45, 18}, 12, secondary, 500, 1, white::TextAlign::right);
+      } else if (settings_tab_ == "shortcuts") {
+        label(surface, "快捷键概览", {prev_rect.x + 16, prev_rect.y + 16, prev_rect.width - 32, 22}, 14, ink, 650);
+        label(surface, "预设方案: Tokmon 默认", {prev_rect.x + 16, prev_rect.y + 50, prev_rect.width - 32, 18}, 12, secondary, 450);
+        label(surface, "已修改: 0 项", {prev_rect.x + 16, prev_rect.y + 76, prev_rect.width - 32, 18}, 12, secondary, 450);
+        label(surface, "冲突状态: 无冲突", {prev_rect.x + 16, prev_rect.y + 102, prev_rect.width - 32, 18}, 12, secondary, 450);
+
+        const auto draw_shortcut_row = [&](std::string_view title, std::span<const std::string_view> keys, float y) {
+          label(surface, title, {form_rect.x, y + 8, 140, 20}, 13, ink, 600);
+          float k_x = form_rect.x + form_w - 18;
+          for (const auto &k : std::views::reverse(keys)) {
+            const float k_w = (utf8_length(k) > 1 ? 38.0F : 28.0F);
+            k_x -= k_w;
+            const Rect k_box{k_x, y + 4, k_w, 26};
+            surface.fill_rect(k_box, {252, 252, 250, 255}, 6);
+            surface.stroke_rect(k_box, hairline, 1, 6);
+            label(surface, k, k_box, 11, secondary, 500, 1, white::TextAlign::center);
+            if (&k != &keys.front()) {
+              k_x -= 14;
+              label(surface, "+", {k_x, y + 6, 12, 20}, 11, muted, 450, 1, white::TextAlign::center);
+            }
+          }
+        };
+
+        constexpr std::string_view k1[] = {"Ctrl", "N"};
+        draw_shortcut_row("新建会话", k1, form_y);
+        form_y += 56;
+
+        constexpr std::string_view k2[] = {"Ctrl", ","};
+        draw_shortcut_row("打开设置", k2, form_y);
+        form_y += 56;
+
+        constexpr std::string_view k3[] = {"Enter"};
+        draw_shortcut_row("发送消息", k3, form_y);
+        form_y += 56;
+
+        constexpr std::string_view k4[] = {"Ctrl", "Shift", "P"};
+        draw_shortcut_row("命令面板", k4, form_y);
+      } else if (settings_tab_ == "account") {
+        label(surface, "账户概览", {prev_rect.x + 16, prev_rect.y + 16, prev_rect.width - 32, 22}, 14, ink, 650);
+        label(surface, "昵称: Jiandong Chen", {prev_rect.x + 16, prev_rect.y + 50, prev_rect.width - 32, 18}, 12, secondary, 450);
+        label(surface, "方案: Pro", {prev_rect.x + 16, prev_rect.y + 76, prev_rect.width - 32, 18}, 12, secondary, 450);
+        label(surface, "云同步: ● 已开启", {prev_rect.x + 16, prev_rect.y + 102, prev_rect.width - 32, 18}, 12, success, 500);
+
+        surface.fill_circle(form_rect.x + form_w / 2, form_y + 28, 28, gold_pill_bg);
+        surface.fill_circle(form_rect.x + form_w / 2, form_y + 22, 9, gold_dark);
+        surface.fill_rect({form_rect.x + form_w / 2 - 13, form_y + 33, 26, 16}, gold_dark, 10);
+        form_y += 72;
+
+        const auto draw_account_row = [&](std::string_view key_text, std::string_view val_text, float y) {
+          const Rect a_box{form_rect.x, y, form_w, 38};
+          surface.fill_rect(a_box, {252, 252, 250, 255}, 8);
+          surface.stroke_rect(a_box, hairline, 1, 8);
+          label(surface, key_text, {a_box.x + 14, a_box.y + 9, 100, 20}, 12, ink, 500);
+          label(surface, val_text, {a_box.x + 120, a_box.y + 9, a_box.width - 150, 20}, 12, secondary, 450, 1, white::TextAlign::right);
+          draw_icon(surface, "chevron", a_box.x + a_box.width - 18, a_box.y + 19, muted);
+        };
+
+        draw_account_row("昵称", frame.settings.account_name, form_y);
+        form_y += 48;
+
+        draw_account_row("登录邮箱", frame.settings.account_email, form_y);
+        form_y += 48;
+
+        draw_account_row("当前方案", frame.settings.account_plan, form_y);
+        form_y += 48;
+
+        draw_form_row_label("云同步", form_y);
+        draw_toggle_switch(form_rect.x + form_w - 48, form_y, frame.settings.cloud_sync, "cloud_sync");
+      }
+
+      // Modal Footer: 恢复默认设置 (left) | 取消 | 保存更改 (right)
+      const Rect restore_btn{modal.x + 28, modal.y + modal.height - 60, 132, 38};
+      if (hovered(restore_btn)) surface.fill_rect(restore_btn, hover_fill, dp(8));
+      surface.stroke_rect(restore_btn, hairline, 1, dp(8));
+      label(surface, "恢复默认设置", restore_btn, 13, secondary, 500, 1, white::TextAlign::center);
+      add_hit(restore_btn, WorkbenchActionKind::redraw);
+
+      const Rect cancel_btn{modal.x + modal.width - 220, modal.y + modal.height - 60, 90, 38};
+      if (hovered(cancel_btn)) surface.fill_rect(cancel_btn, hover_fill, dp(8));
+      surface.stroke_rect(cancel_btn, hairline, 1, dp(8));
+      label(surface, "取消", cancel_btn, 13, ink, 500, 1, white::TextAlign::center);
+      add_hit(cancel_btn, WorkbenchActionKind::close_settings);
+
+      const Rect save_btn{modal.x + modal.width - 120, modal.y + modal.height - 60, 100, 38};
+      surface.fill_rect(save_btn, hovered(save_btn) ? Color{243, 223, 192, 255} : gold_pill_bg, dp(8));
+      surface.stroke_rect(save_btn, gold_pill_border, 1, dp(8));
+      label(surface, "保存更改", save_btn, 13, gold_dark, 600, 1, white::TextAlign::center);
+      add_hit(save_btn, WorkbenchActionKind::save_settings);
+    }
+  }
+
+  // 8. Profile / Account Dropdown Menu
   profile_menu_bounds_ = {};
-  if (profile_menu_open_ && !settings_open_ && !archive_open_ &&
-      !plugins_open_) {
+  if (profile_menu_open_ && !settings_open_ && !archive_open_ && !plugins_open_) {
     const float menu_width = 224;
     const float menu_x = std::max(12.0F, width - menu_width - 164.0F);
     const Rect menu{menu_x, 57, menu_width, 154};
@@ -2497,7 +2198,7 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
                       {42, 43, 48, 35}, 12);
     surface.fill_rect(menu, {255, 255, 254, 255}, 12);
     surface.stroke_rect(menu, hairline, 1, 12);
-    label(surface, "Tokmon User",
+    label(surface, frame.settings.account_name.empty() ? "Tokmon User" : frame.settings.account_name,
           {menu.x + 14, menu.y + 10, menu.width - 28, 20}, 11, ink, 650);
     label(surface, "Arche Agent OS",
           {menu.x + 14, menu.y + 29, menu.width - 28, 18}, 9, muted, 450);
@@ -2510,7 +2211,7 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
     };
     constexpr AccountCommand commands[] = {
         {"settings", "设置", WorkbenchActionKind::open_settings},
-        {"plugin", "插件与能力编排", WorkbenchActionKind::open_plugins},
+        {"cube", "插件与能力编排", WorkbenchActionKind::open_plugins},
         {"pulse", "运行诊断", WorkbenchActionKind::diagnostics}};
     float row_y = menu.y + 59;
     for (const auto &command : commands) {
@@ -2526,673 +2227,57 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
     }
   }
 
-  // Archive and plugin workspaces deliberately share the same outer geometry.
-  // Switching between tools therefore never causes the floating surface to
-  // jump or resize, which keeps the visual hierarchy calm and predictable.
-  if (archive_open_) {
-    hits_.clear();
-    surface.fill_rect({0, 0, width, height}, {242, 243, 244, 210});
-    const float modal_width = std::min(1040.0F, width - 72.0F);
-    const float modal_height = std::min(720.0F, height - 72.0F);
-    const Rect modal{(width - modal_width) / 2, (height - modal_height) / 2,
-                     modal_width, modal_height};
-    surface.fill_rect({modal.x + 5, modal.y + 9, modal.width, modal.height},
-                      {33, 34, 38, 38}, 18);
-    surface.fill_rect(modal, panel, 18);
-    surface.stroke_rect(modal, hairline, 1, 18);
-
-    draw_icon(surface, "file", modal.x + 30, modal.y + 35, ink);
-    label(surface, "工作区归档", {modal.x + 54, modal.y + 20, 220, 24}, 16,
-          ink, 680);
-    label(surface, "查看和恢复已归档的项目、分组与会话",
-          {modal.x + 54, modal.y + 46, 360, 20}, 10, muted, 430);
-    const Rect close{modal.x + modal.width - 45, modal.y + 18, 30, 30};
-    if (hovered(close)) surface.fill_rect(close, hover_fill, 8);
-    draw_icon(surface, "window-close", close.x + 15, close.y + 15,
-              hovered(close) ? danger : secondary);
-    add_hit(close, WorkbenchActionKind::close_archive);
-
-    const float toolbar_y = modal.y + 88;
-    const Rect search{modal.x + 18, toolbar_y, 315, 38};
-    filter_editor_bounds_ = search;
-    filter_editor_text_ = frame.file_filter;
-    surface.fill_rect(search, panel, 9);
-    surface.stroke_rect(search, hovered(search) ? hover_border : hairline, 1,
-                        9);
-    draw_icon(surface, "search", search.x + 17, search.y + 19, muted);
-    label(surface,
-          frame.file_filter.empty() ? "搜索分组、项目或会话…"
-                                    : frame.file_filter,
-          {search.x + 38, search.y + 9, search.width - 100, 21}, 10,
-          frame.file_filter.empty() ? muted : ink, 430);
-    const Rect key{search.x + search.width - 56, search.y + 8, 45, 22};
-    surface.fill_rect(key, selected_fill, 6);
-    label(surface, "Ctrl K", key, 8, muted, 500, 1, white::TextAlign::center);
-    add_hit(search, WorkbenchActionKind::focus_filter);
-    button({search.x + search.width + 14, toolbar_y, 104, 38}, "全部类型⌄",
-           WorkbenchActionKind::redraw);
-    button({search.x + search.width + 128, toolbar_y, 104, 38}, "全部时间⌄",
-           WorkbenchActionKind::redraw);
-    button({search.x + search.width + 242, toolbar_y, 94, 38}, "更多筛选",
-           WorkbenchActionKind::redraw);
-    label(surface,
-          "共 " + std::to_string(std::max<std::size_t>(34,
-                                                        frame.session_items().size())) +
-              " 项归档",
-          {modal.x + modal.width - 180, toolbar_y + 9, 155, 22}, 10, muted,
-          450, 1, white::TextAlign::right);
-
-    const Rect table{modal.x + 18, toolbar_y + 54, modal.width - 36,
-                     modal.height - 196};
-    surface.fill_rect(table, panel, 10);
-    surface.stroke_rect(table, hairline, 1, 10);
-    const std::array<std::pair<std::string_view, float>, 5> columns = {
-        std::pair{"名称", 16.0F}, {"类型", 440.0F}, {"会话数", 568.0F},
-        {"归档时间", 690.0F}, {"操作", 875.0F}};
-    for (const auto &[name, offset] : columns)
-      label(surface, name, {table.x + offset, table.y + 10, 130, 20}, 9,
-            muted, 550);
-    surface.line(table.x, table.y + 38, table.x + table.width, table.y + 38,
-                 hairline);
-
-    struct ArchiveRow {
-      std::string_view title;
-      std::string_view type;
-      std::string_view count;
-      std::string_view archived;
-      int depth;
-      bool group;
-    };
-    constexpr ArchiveRow sample_rows[] = {
-        {"2024 Q4 版本开发", "项目", "12", "2024-12-28 14:32", 0, true},
-        {"tokmon-core 重构", "项目", "1", "2024-12-28 14:32", 1, false},
-        {"构建系统升级（CMake 3.27）", "项目", "8", "2024-12-21 09:15", 1,
-         true},
-        {"CMake 配置与依赖排查", "会话", "1", "2024-12-21 09:15", 2,
-         false},
-        {"生成器切换与工具链验证", "会话", "1", "2024-12-21 10:03", 2,
-         false},
-        {"性能优化专项", "项目", "6", "2024-12-18 16:40", 1, true},
-        {"研究与实验", "分组", "24", "2024-11-30 18:22", 0, true},
-        {"插件通信机制探索", "项目", "9", "2024-11-25 13:06", 1,
-         false}};
-    float row_y = table.y + 39;
-    for (std::size_t index = 0; index < std::size(sample_rows); ++index) {
-      const auto &entry = sample_rows[index];
-      const Rect row{table.x + 1, row_y, table.width - 2, 42};
-      if (hovered(row)) surface.fill_rect(row, hover_fill);
-      surface.line(row.x, row.y + row.height, row.x + row.width,
-                   row.y + row.height, hairline);
-      const float name_x = row.x + 17 + static_cast<float>(entry.depth) * 22;
-      if (entry.group)
-        draw_icon(surface, "chevron", name_x, row.y + 21, secondary);
-      draw_icon(surface, entry.type == "会话" ? "chat" : "folder",
-                name_x + 19, row.y + 21, secondary);
-      label(surface, entry.title,
-            {name_x + 37, row.y + 10,
-             360 - static_cast<float>(entry.depth) * 20.0F, 21}, 10,
-            ink, entry.depth == 0 ? 620 : 450);
-      label(surface, entry.type, {table.x + 440, row.y + 10, 110, 21}, 10,
-            secondary, 450);
-      label(surface, entry.count, {table.x + 568, row.y + 10, 90, 21}, 10,
-            ink, 520);
-      label(surface, entry.archived,
-            {table.x + 690, row.y + 10, 160, 21}, 10, secondary, 450);
-      label(surface, "•••", {table.x + 875, row.y + 9, 54, 20}, 11, ink, 600,
-            1, white::TextAlign::center);
-      if (index < frame.session_items().size())
-        hits_.push_back({row, WorkbenchActionKind::switch_session, {},
-                         frame.session_items()[index].id});
-      row_y += 42;
+  // 9. Application Top Menus
+  if (!active_menu_.empty()) {
+    struct MenuEntry { std::string label; WorkbenchActionKind action; std::string value; };
+    std::vector<MenuEntry> entries;
+    float menu_x = 128;
+    if (active_menu_ == "file") {
+      menu_x = 128;
+      entries = {{"新建会话", WorkbenchActionKind::new_session, ""},
+                 {"打开工作区文件", WorkbenchActionKind::open_file_dialog, ""},
+                 {"添加附件", WorkbenchActionKind::attach_files, ""}};
+    } else if (active_menu_ == "edit") {
+      menu_x = 178;
+      entries = {{"聚焦输入框", WorkbenchActionKind::focus_message, ""},
+                 {"清空输入", WorkbenchActionKind::set_message_input, ""}};
+    } else if (active_menu_ == "view") {
+      menu_x = 228;
+      entries = {{sidebar_collapsed_ ? "展开会话栏" : "折叠会话栏", WorkbenchActionKind::toggle_left_panel, ""},
+                 {viewer_collapsed_ ? "展开工作区" : "折叠工作区", WorkbenchActionKind::toggle_right_panel, ""},
+                 {"查看 Arche 状态", WorkbenchActionKind::inspect_composition, ""}};
+    } else if (active_menu_ == "help") {
+      menu_x = 260;
+      entries = {{"使用指南", WorkbenchActionKind::show_help, ""},
+                 {"关于 Tokmon", WorkbenchActionKind::open_settings, ""}};
     }
-    label(surface, "共 7 个分组、14 个项目、34 个会话",
-          {modal.x + 22, modal.y + modal.height - 43, 320, 22}, 10, muted, 430);
-    const Rect page{modal.x + modal.width - 207, modal.y + modal.height - 48,
-                    33, 32};
-    surface.fill_rect(page, {241, 246, 255, 255}, 7);
-    surface.stroke_rect(page, accent, 1, 7);
-    label(surface, "1", page, 10, accent, 600, 1, white::TextAlign::center);
-    button({page.x + 43, page.y, 120, 32}, "20 条/页⌄",
-           WorkbenchActionKind::redraw);
+    const float menu_h = static_cast<float>(entries.size()) * 36.0F + 8.0F;
+    const Rect dropdown{menu_x, 44, 160, menu_h};
+    open_menu_bounds_ = dropdown;
+    surface.fill_rect(dropdown, panel, dp(8));
+    surface.stroke_rect(dropdown, hairline, 1, dp(8));
+    float ey = dropdown.y + 4;
+    for (const auto &entry : entries) {
+      const Rect e_row{dropdown.x, ey, dropdown.width, 36};
+      if (hovered(e_row)) surface.fill_rect(e_row, hover_fill, dp(6));
+      label(surface, entry.label, {e_row.x + 12, e_row.y + 8, e_row.width - 24, 18}, 12, ink, 500);
+      hits_.push_back({e_row, entry.action, {}, entry.value});
+      ey += 36;
+    }
   }
 
-  if (plugins_open_) {
-    hits_.clear();
-    surface.fill_rect({0, 0, width, height}, {242, 243, 244, 210});
-    const float modal_width = std::min(1040.0F, width - 72.0F);
-    const float modal_height = std::min(720.0F, height - 72.0F);
-    const Rect modal{(width - modal_width) / 2, (height - modal_height) / 2,
-                     modal_width, modal_height};
-    surface.fill_rect({modal.x + 5, modal.y + 9, modal.width, modal.height},
-                      {33, 34, 38, 38}, 18);
-    surface.fill_rect(modal, panel, 18);
-    surface.stroke_rect(modal, hairline, 1, 18);
-    label(surface, "插件页面", {modal.x + 26, modal.y + 18, 180, 25}, 16, ink,
-          680);
-    const Rect close{modal.x + modal.width - 45, modal.y + 17, 30, 30};
-    if (hovered(close)) surface.fill_rect(close, hover_fill, 8);
-    draw_icon(surface, "window-close", close.x + 15, close.y + 15,
-              hovered(close) ? danger : secondary);
-    add_hit(close, WorkbenchActionKind::close_plugins);
-    const std::array<std::string_view, 3> tabs = {"插件中心", "能力编排",
-                                                  "我的插件"};
-    float tab_x = modal.x + 26;
-    for (std::size_t index = 0; index < tabs.size(); ++index) {
-      const Rect tab{tab_x, modal.y + 54, 96, 42};
-      if (index == 1) {
-        label(surface, tabs[index], tab, 11, accent, 620, 1,
-              white::TextAlign::center);
-        surface.fill_rect({tab.x + 22, tab.y + tab.height - 2,
-                           tab.width - 44, 2}, accent, 1);
-      } else {
-        label(surface, tabs[index], tab, 11, secondary, 500, 1,
-              white::TextAlign::center);
-      }
-      add_hit(tab, WorkbenchActionKind::redraw);
-      tab_x += 114;
-    }
-    surface.line(modal.x, modal.y + 96, modal.x + modal.width, modal.y + 96,
-                 hairline);
-
-    const float detail_width = 330;
-    const Rect canvas{modal.x, modal.y + 97, modal.width - detail_width,
-                      modal.height - 97};
-    const Rect detail{canvas.x + canvas.width, canvas.y, detail_width,
-                      canvas.height};
-    surface.line(detail.x, detail.y, detail.x, detail.y + detail.height,
-                 hairline);
-    for (float gx = canvas.x + 22; gx < canvas.x + canvas.width; gx += 18)
-      for (float gy = canvas.y + 68; gy < canvas.y + canvas.height; gy += 18)
-        surface.fill_circle(gx, gy, 0.65F, {214, 216, 220, 170});
-
-    const Rect graph_search{canvas.x + 24, canvas.y + 20, 270, 36};
-    surface.fill_rect(graph_search, panel, 8);
-    surface.stroke_rect(graph_search, hairline, 1, 8);
-    draw_icon(surface, "search", graph_search.x + 17, graph_search.y + 18,
-              muted);
-    label(surface, "搜索插件或能力…",
-          {graph_search.x + 38, graph_search.y + 8, 210, 20}, 10, muted, 430);
-    button({canvas.x + canvas.width - 216, canvas.y + 20, 92, 36},
-           "+ 添加节点", WorkbenchActionKind::redraw);
-    button({canvas.x + canvas.width - 114, canvas.y + 20, 90, 36},
-           "自动布局", WorkbenchActionKind::redraw);
-
-    const Rect terminal{canvas.x + canvas.width * 0.40F, canvas.y + 248, 188,
-                        88};
-    const std::array<Rect, 6> nodes = {
-        Rect{canvas.x + 74, canvas.y + 92, 188, 80},
-        Rect{canvas.x + canvas.width - 262, canvas.y + 92, 188, 80},
-        Rect{canvas.x + 28, canvas.y + 250, 188, 80},
-        Rect{canvas.x + canvas.width - 216, canvas.y + 250, 188, 80},
-        Rect{canvas.x + 74, canvas.y + 414, 188, 80},
-        Rect{canvas.x + canvas.width - 262, canvas.y + 414, 188, 80}};
-    const std::array<std::pair<std::string_view, std::string_view>, 6>
-        node_text = {{{"文件系统", "读写文件与目录"},
-                      {"代码分析", "解析代码结构与符号"},
-                      {"工作区观察器", "监听文件变更"},
-                      {"文档检索", "检索项目内文档"},
-                      {"时间记忆", "跨会话记忆存储"},
-                      {"测试运行", "发现并运行测试"}}};
-    for (const auto &node : nodes) {
-      const float start_x = node.x < terminal.x ? node.x + node.width : node.x;
-      const float end_x = node.x < terminal.x ? terminal.x : terminal.x + terminal.width;
-      surface.line(start_x, node.y + node.height / 2, end_x,
-                   terminal.y + terminal.height / 2,
-                   {173, 178, 188, 255}, 1.1F);
-    }
-    const auto draw_node = [&](Rect node, std::string_view title,
-                               std::string_view description, bool selected) {
-      surface.fill_rect(node, panel, 11);
-      surface.stroke_rect(node, selected ? accent : hairline,
-                          selected ? 1.5F : 1.0F, 11);
-      draw_icon(surface, selected ? "plugin" : "file", node.x + 24,
-                node.y + 30, selected ? accent : secondary);
-      label(surface, title, {node.x + 45, node.y + 15, node.width - 55, 20},
-            11, ink, 620);
-      label(surface, description,
-            {node.x + 45, node.y + 38, node.width - 55, 18}, 9, muted, 430);
-      surface.fill_circle(node.x + 45, node.y + node.height - 14, 3, success);
-      label(surface, "启用",
-            {node.x + 54, node.y + node.height - 23, 50, 18}, 8, success,
-            500);
-      add_hit(node, WorkbenchActionKind::redraw);
-    };
-    for (std::size_t index = 0; index < nodes.size(); ++index)
-      draw_node(nodes[index], node_text[index].first, node_text[index].second,
-                false);
-    draw_node(terminal, "终端执行", "执行命令与脚本", true);
-    const Rect zoom{canvas.x + 24, canvas.y + canvas.height - 52, 245, 36};
-    surface.fill_rect(zoom, panel, 8);
-    surface.stroke_rect(zoom, hairline, 1, 8);
-    label(surface, "↖     ✋      −     100%     +     ⛶", zoom, 10,
-          secondary, 500, 1, white::TextAlign::center);
-
-    const Rect plugin_mark{detail.x + 22, detail.y + 20, 44, 44};
-    surface.fill_rect(plugin_mark, {60, 63, 69, 255}, 8);
-    label(surface, ">_", plugin_mark, 13, {255, 255, 255, 255}, 650, 1,
-          white::TextAlign::center);
-    label(surface, "终端执行", {detail.x + 78, detail.y + 21, 150, 22}, 13,
-          ink, 650);
-    label(surface, "v1.2.0", {detail.x + 78, detail.y + 43, 100, 18}, 9,
-          muted, 450);
-    surface.fill_rect({detail.x + detail.width - 86, detail.y + 24, 64, 24},
-                      {235, 248, 239, 255}, 12);
-    label(surface, "● 启用中",
-          {detail.x + detail.width - 84, detail.y + 27, 60, 18}, 8, success,
-          550, 1, white::TextAlign::center);
-    label(surface, "在隔离环境中执行命令、脚本并返回结果。",
-          {detail.x + 22, detail.y + 78, detail.width - 44, 38}, 9, secondary,
-          430, 2);
-    label(surface, "权限", {detail.x + 22, detail.y + 126, 120, 20}, 10, ink,
-          620);
-    label(surface, "shell:execute    fs:read    env:read",
-          {detail.x + 22, detail.y + 150, detail.width - 44, 25}, 8, secondary,
-          500);
-    const auto draw_schema = [&](float y, std::string_view title,
-                                 std::string_view code) {
-      label(surface, title, {detail.x + 22, y, 160, 18}, 9, ink, 600);
-      const Rect card{detail.x + 22, y + 23, detail.width - 44, 126};
-      surface.fill_rect(card, {248, 249, 250, 255}, 7);
-      surface.stroke_rect(card, hairline, 1, 7);
-      label(surface, code, {card.x + 10, card.y + 9, card.width - 20, 105}, 8,
-            secondary, 430, 6);
-    };
-    draw_schema(detail.y + 184, "输入 Schema",
-                "{\n  type: object,\n  properties: { command, cwd, env },\n  required: [command]\n}");
-    draw_schema(detail.y + 354, "输出 Schema",
-                "{\n  type: object,\n  properties: { code, stdout, stderr }\n}");
-    const float action_y = detail.y + detail.height - 54;
-    button({detail.x + 22, action_y, 75, 34}, "停用",
-           WorkbenchActionKind::redraw, false, danger);
-    button({detail.x + 108, action_y, 75, 34}, "配置",
-           WorkbenchActionKind::open_config_file);
-    button({detail.x + 194, action_y, detail.width - 216, 34}, "查看文档",
-           WorkbenchActionKind::redraw);
+  // Resizing splitters
+  if (last_layout_.sidebar_splitter.width > 0) {
+    const auto &splitter = last_layout_.sidebar_splitter;
+    if (hovered(splitter) || resizing_sidebar_)
+      surface.fill_rect({splitter.x + 1, splitter.y, 2, splitter.height}, gold_accent);
+  }
+  if (last_layout_.viewer_splitter.width > 0) {
+    const auto &splitter = last_layout_.viewer_splitter;
+    if (hovered(splitter) || resizing_viewer_)
+      surface.fill_rect({splitter.x + 1, splitter.y, 2, splitter.height}, gold_accent);
   }
 
-  // Settings is a centered, modal workspace. The view edits a draft owned by
-  // App; Save atomically updates the JSON configuration set.
-  settings_modal_bounds_ = {};
-  settings_editor_bounds_ = {};
-  settings_editor_text_.clear();
-  settings_editor_field_.clear();
-  if (settings_open_) {
-    hits_.clear();
-    surface.fill_rect({0, 0, width, height}, {242, 243, 244, 210});
-    const float modal_width = std::min(1040.0F, width - 72.0F);
-    const float modal_height = std::min(720.0F, height - 72.0F);
-    const Rect modal{(width - modal_width) / 2, (height - modal_height) / 2,
-                     modal_width, modal_height};
-    settings_modal_bounds_ = modal;
-    surface.fill_rect({modal.x + 5, modal.y + 8, modal.width, modal.height},
-                      {33, 34, 38, 45}, 18);
-    surface.fill_rect(modal, {255, 255, 254, 255}, 18);
-    surface.stroke_rect(modal, {218, 218, 215, 255}, 1, 18);
-    draw_icon(surface, "branch", modal.x + 28, modal.y + 30, ink);
-    label(surface, "设置", {modal.x + 49, modal.y + 18, 100, 24}, 15, ink, 650);
-
-    const Rect open_config{modal.x + modal.width - 170, modal.y + 15, 122, 30};
-    if (hovered(open_config))
-      surface.fill_rect(open_config, hover_fill, 9);
-    surface.stroke_rect(open_config,
-                        hovered(open_config) ? hover_border : hairline, 1, 9);
-    label(surface, "打开配置文件", open_config, 10, ink, 500, 1,
-          white::TextAlign::center);
-    add_hit(open_config, WorkbenchActionKind::open_config_file);
-    const Rect close{modal.x + modal.width - 40, modal.y + 14, 28, 30};
-    if (hovered(close))
-      surface.fill_rect(close, hover_fill, 8);
-    draw_icon(surface, "window-close", close.x + 14, close.y + 15,
-              hovered(close) ? danger : secondary);
-    add_hit(close, WorkbenchActionKind::close_settings);
-
-    const float navigation_width = 184;
-    const Rect navigation{modal.x + 12, modal.y + 56, navigation_width,
-                          modal.height - 70};
-    surface.line(navigation.x + navigation.width, navigation.y,
-                 navigation.x + navigation.width,
-                 navigation.y + navigation.height, hairline);
-    struct SettingsNav {
-      std::string_view id;
-      std::string_view icon;
-      std::string_view label;
-    };
-    constexpr SettingsNav settings_nav[] = {
-        {"general", "settings", "通用"},
-        {"appearance", "model", "外观"},
-        {"models", "pulse", "模型与代理"},
-        {"workspace", "folder", "工作空间"},
-        {"shortcuts", "file", "快捷键"},
-        {"about", "branch", "关于"}};
-    float nav_y = navigation.y + 12;
-    for (const auto &item : settings_nav) {
-      const Rect row{navigation.x + 5, nav_y, navigation.width - 18, 39};
-      const auto selected = settings_tab_ == item.id;
-      if (selected || hovered(row))
-        surface.fill_rect(row, selected ? selected_fill : hover_fill, 9);
-      draw_icon(surface, item.icon, row.x + 18, row.y + 20,
-                selected ? ink : secondary);
-      label(surface, item.label, {row.x + 38, row.y + 9, row.width - 45, 21},
-            11, selected ? ink : secondary, selected ? 650 : 500);
-      hits_.push_back(
-          {row, WorkbenchActionKind::settings_tab, {}, std::string(item.id)});
-      nav_y += 44;
-    }
-
-    const Rect content{navigation.x + navigation.width + 24, modal.y + 66,
-                       modal.width - navigation.width - 60, modal.height - 136};
-    const auto draw_section_title = [&](std::string_view title,
-                                        std::string_view description) {
-      label(surface, title, {content.x, content.y, content.width, 25}, 15, ink,
-            650);
-      label(surface, description,
-            {content.x, content.y + 31, content.width, 35}, 10, muted, 400, 2);
-    };
-    const auto draw_toggle = [&](float y, std::string_view label_text,
-                                 std::string_view description,
-                                 std::string_view key, bool value) {
-      const Rect row{content.x, y, content.width, 48};
-      if (hovered(row))
-        surface.fill_rect(row, {249, 249, 248, 255}, 8);
-      label(surface, label_text, {row.x + 10, row.y + 7, row.width - 90, 20},
-            11, ink, 550);
-      label(surface, description, {row.x + 10, row.y + 26, row.width - 90, 17},
-            9, muted, 400);
-      const Rect toggle{row.x + row.width - 51, row.y + 12, 39, 23};
-      surface.fill_rect(toggle, value ? accent : Color{205, 206, 208, 255}, 12);
-      surface.fill_circle(toggle.x + (value ? 28 : 11), toggle.y + 11.5F, 8.5F,
-                          {255, 255, 255, 255});
-      hits_.push_back({row,
-                       WorkbenchActionKind::set_setting,
-                       {},
-                       std::string(key) + "=" + (value ? "false" : "true")});
-    };
-    const auto draw_choice = [&](float y, std::string_view label_text,
-                                 std::string_view value,
-                                 std::string_view encoded_next) {
-      const Rect row{content.x, y, content.width, 43};
-      if (hovered(row))
-        surface.fill_rect(row, {249, 249, 248, 255}, 8);
-      label(surface, label_text, {row.x + 10, row.y + 10, 190, 20}, 11, ink,
-            550);
-      label(surface, value, {row.x + row.width - 185, row.y + 10, 155, 20}, 10,
-            secondary, 500, 1, white::TextAlign::right);
-      draw_icon(surface, "chevron", row.x + row.width - 16, row.y + 21, muted);
-      hits_.push_back({row,
-                       WorkbenchActionKind::set_setting,
-                       {},
-                       std::string(encoded_next)});
-    };
-    const auto draw_field = [&](float y, std::string_view field,
-                                std::string_view label_text,
-                                std::string_view hint = {}) {
-      label(surface, label_text, {content.x, y, content.width, 18}, 9,
-            secondary, 550);
-      const Rect input{content.x, y + 21, content.width, 34};
-      const auto active = frame.active_settings_field == field;
-      surface.fill_rect(input, {255, 255, 255, 255}, 7);
-      surface.stroke_rect(
-          input, active ? accent : (hovered(input) ? hover_border : hairline),
-          active ? 1.3F : 1.0F, 7);
-      const auto value = setting_value(frame.settings, field);
-      const Rect editor{input.x + 11, input.y + 8, input.width - 22, 19};
-      if (value.empty() && !hint.empty())
-        label(surface, hint, editor, 10, muted, 400);
-      else if (active) {
-        draw_editor_text(surface, value, editor, frame.editor_cursor,
-                         frame.selection_start, frame.selection_end,
-                         frame.settings_field_focused, frame.caret_visible, 10,
-                         1);
-        settings_editor_bounds_ = editor;
-        settings_editor_text_ = value;
-        settings_editor_field_ = std::string(field);
-      } else {
-        label(surface, value, editor, 10, ink, 450);
-      }
-      hits_.push_back({input,
-                       WorkbenchActionKind::focus_settings_field,
-                       {},
-                       std::string(field)});
-    };
-
-    if (settings_tab_ == "general") {
-      draw_section_title("通用", "配置启动、语言和运行时更新行为。");
-      float y = content.y + 76;
-      draw_choice(y, "界面语言", frame.settings.language,
-                  "language=" + std::string(frame.settings.language == "zh-CN"
-                                                ? "en-US"
-                                                : "zh-CN"));
-      y += 54;
-      draw_toggle(y, "启动时恢复工作区", "打开上次使用的工作区和会话",
-                  "auto_scroll", frame.settings.auto_scroll);
-      y += 56;
-      draw_toggle(y, "自动检查更新", "定期检查 Tokmon 与 Snow 组件更新",
-                  "restart_enabled", frame.settings.restart_enabled);
-      y += 62;
-      draw_field(y, "request_timeout_ms", "请求超时（毫秒）", "300000");
-    } else if (settings_tab_ == "appearance") {
-      draw_section_title("外观", "统一调整主题、字号、界面密度和代码字体。");
-      float y = content.y + 76;
-      const auto next_theme = frame.settings.theme == "system"  ? "light"
-                              : frame.settings.theme == "light" ? "dark"
-                                                                : "system";
-      draw_choice(y, "主题模式", frame.settings.theme,
-                  "theme=" + std::string(next_theme));
-      y += 62;
-      const auto draw_segment = [&](std::string_view title,
-                                    std::array<std::string_view, 3> choices,
-                                    std::size_t selected) {
-        label(surface, title, {content.x + 10, y, 180, 20}, 11, ink, 550);
-        const Rect rail{content.x + content.width - 310, y - 5, 300, 32};
-        surface.fill_rect(rail, selected_fill, 8);
-        const float segment_width = rail.width / 3;
-        for (std::size_t index = 0; index < choices.size(); ++index) {
-          const Rect segment{rail.x + segment_width * static_cast<float>(index),
-                             rail.y, segment_width, rail.height};
-          if (index == selected) {
-            surface.fill_rect({segment.x + 2, segment.y + 2,
-                               segment.width - 4, segment.height - 4},
-                              panel, 7);
-            surface.stroke_rect({segment.x + 2, segment.y + 2,
-                                 segment.width - 4, segment.height - 4},
-                                hairline, 1, 7);
-          }
-          label(surface, choices[index], segment, 10,
-                index == selected ? ink : secondary,
-                index == selected ? 600 : 450, 1,
-                white::TextAlign::center);
-        }
-        y += 50;
-      };
-      draw_segment("字体大小", {"小", "中（推荐）", "大"}, 1);
-      draw_segment("界面密度", {"紧凑", "舒适", "宽松"}, 1);
-      draw_choice(y, "代码字体", "JetBrains Mono", "redraw");
-    } else if (settings_tab_ == "models") {
-      draw_section_title("模型与代理",
-                         "配置默认模型、提供方和代理执行参数；密钥不会写入 JSON。");
-      float y = content.y + 71;
-      const Rect provider_card{content.x, y, content.width, 48};
-      surface.fill_rect(provider_card, {250, 250, 249, 255}, 9);
-      surface.stroke_rect(provider_card, hairline, 1, 9);
-      surface.fill_circle(provider_card.x + 18, provider_card.y + 24, 4,
-                          success);
-      label(surface, frame.settings.provider_name,
-            {provider_card.x + 32, provider_card.y + 8,
-             provider_card.width - 44, 20},
-            11, ink, 650);
-      label(surface, frame.settings.provider_kind,
-            {provider_card.x + 32, provider_card.y + 26,
-             provider_card.width - 44, 16},
-            9, muted, 450);
-      y += 62;
-      draw_field(y, "provider_id", "Provider ID", "default");
-      y += 66;
-      draw_field(y, "provider_name", "显示名称", "Default provider");
-      y += 66;
-      draw_field(y, "endpoint", "API 地址", "https://…/v1/chat/completions");
-      y += 66;
-      draw_field(y, "api_key_env", "API 密钥环境变量", "OPENAI_API_KEY");
-      y += 66;
-      draw_field(y, "model", "默认模型", "gpt-5");
-      y += 64;
-      const Rect add_provider{content.x, y, content.width, 32};
-      if (hovered(add_provider))
-        surface.fill_rect(add_provider, {247, 248, 250, 255}, 8);
-      surface.stroke_rect(
-          add_provider, hovered(add_provider) ? hover_border : hairline, 1, 8);
-      label(surface, "+ 新增自定义提供方", add_provider, 10, secondary, 550, 1,
-            white::TextAlign::center);
-      hits_.push_back({add_provider,
-                       WorkbenchActionKind::set_setting,
-                       {},
-                       "provider_template=custom"});
-    } else if (settings_tab_ == "plugins") {
-      draw_section_title("插件",
-                         "Arche 在运行时组合能力；核心微内核插件保持锁定。");
-      float y = content.y + 72;
-      for (std::size_t index = 0; index < frame.settings.plugins.size();
-           ++index) {
-        const auto &plugin = frame.settings.plugins[index];
-        if (y + 54 > content.y + content.height)
-          break;
-        const Rect row{content.x, y, content.width, 49};
-        if (hovered(row))
-          surface.fill_rect(row, {249, 249, 248, 255}, 8);
-        surface.fill_circle(row.x + 14, row.y + 17, 3.5F,
-                            plugin.disabled ? muted : success);
-        label(surface, plugin.instance, {row.x + 27, row.y + 6, 145, 20}, 11,
-              ink, 650);
-        label(surface, plugin.realm + " · " + plugin.package,
-              {row.x + 27, row.y + 25, row.width - 105, 17}, 9, muted, 400);
-        if (plugin.required) {
-          label(surface, "核心 · 已锁定",
-                {row.x + row.width - 94, row.y + 14, 80, 18}, 9, muted, 550, 1,
-                white::TextAlign::right);
-        } else {
-          const Rect toggle{row.x + row.width - 52, row.y + 13, 39, 23};
-          const auto enabled = !plugin.disabled;
-          surface.fill_rect(toggle,
-                            enabled ? accent : Color{205, 206, 208, 255}, 12);
-          surface.fill_circle(toggle.x + (enabled ? 28 : 11), toggle.y + 11.5F,
-                              8.5F, {255, 255, 255, 255});
-          hits_.push_back(
-              {row, WorkbenchActionKind::set_setting, {}, "plugin", index});
-        }
-        y += 54;
-      }
-    } else if (settings_tab_ == "workspace") {
-      draw_section_title("工作空间",
-                         "控制工作区会话行为、轨迹记录与默认执行方式。");
-      float y = content.y + 76;
-      struct Preset {
-        std::string_view id;
-        std::string_view label;
-        std::string_view description;
-      };
-      constexpr Preset presets[] = {
-          {"balanced", "均衡", "规划、执行与审阅保持平衡"},
-          {"autonomous", "自主", "允许更长的自进化执行轨迹"},
-          {"review", "审阅", "优先分析和确认，减少主动变更"}};
-      const float card_width = (content.width - 16) / 3;
-      float x = content.x;
-      for (const auto &preset : presets) {
-        const Rect card{x, y, card_width, 82};
-        const auto selected = frame.settings.agent_preset == preset.id;
-        surface.fill_rect(
-            card,
-            selected ? Color{241, 245, 253, 255}
-                     : (hovered(card) ? Color{249, 249, 248, 255} : panel),
-            10);
-        surface.stroke_rect(card, selected ? accent : hairline,
-                            selected ? 1.3F : 1.0F, 10);
-        label(surface, preset.label,
-              {card.x + 10, card.y + 10, card.width - 20, 20}, 11, ink, 650);
-        label(surface, preset.description,
-              {card.x + 10, card.y + 33, card.width - 20, 36}, 9, muted, 400,
-              2);
-        hits_.push_back({card,
-                         WorkbenchActionKind::set_setting,
-                         {},
-                         "agent_preset=" + std::string(preset.id)});
-        x += card_width + 8;
-      }
-      y += 102;
-      draw_field(y, "max_steps", "每轮最大步骤", "32");
-      y += 72;
-      const auto next_permission =
-          frame.settings.default_permission == "ask"     ? "allow"
-          : frame.settings.default_permission == "allow" ? "deny"
-                                                         : "ask";
-      draw_choice(y, "可变更操作默认权限", frame.settings.default_permission,
-                  "default_permission=" + std::string(next_permission));
-      y += 54;
-      draw_toggle(y, "保留完整原始轨迹", "为归档和审计保留 Snow raw vault 数据",
-                  "raw_trace", frame.settings.raw_trace);
-    } else if (settings_tab_ == "shortcuts") {
-      draw_section_title("快捷键", "查看工作台中常用操作的键盘映射。");
-      struct ShortcutRow {
-        std::string_view label;
-        std::string_view keys;
-      };
-      constexpr ShortcutRow shortcuts[] = {
-          {"搜索项目或会话", "Ctrl  K"},
-          {"创建新会话", "Ctrl  N"},
-          {"打开设置", "Ctrl  ,"},
-          {"切换轨迹视图", "Ctrl  Shift  T"},
-          {"发送消息", "Enter"},
-          {"消息内换行", "Shift  Enter"}};
-      float y = content.y + 72;
-      for (const auto &shortcut : shortcuts) {
-        const Rect row{content.x, y, content.width, 48};
-        if (hovered(row)) surface.fill_rect(row, hover_fill, 8);
-        label(surface, shortcut.label, {row.x + 10, row.y + 13, 250, 20},
-              11, ink, 500);
-        const Rect key{row.x + row.width - 180, row.y + 10, 168, 28};
-        surface.fill_rect(key, selected_fill, 7);
-        surface.stroke_rect(key, hairline, 1, 7);
-        label(surface, shortcut.keys, key, 9, secondary, 550, 1,
-              white::TextAlign::center);
-        y += 52;
-      }
-    } else {
-      draw_section_title("关于", "Tokmon · 基于 Arche 微内核与 White 原生 UI 引擎。");
-      const Rect brand_card{content.x, content.y + 78, content.width, 118};
-      surface.fill_rect(brand_card, {250, 250, 249, 255}, 12);
-      surface.stroke_rect(brand_card, hairline, 1, 12);
-      surface.fill_circle(brand_card.x + 42, brand_card.y + 42, 25,
-                          selected_fill);
-      draw_icon(surface, "branch", brand_card.x + 42, brand_card.y + 42, ink);
-      label(surface, "Tokmon", {brand_card.x + 80, brand_card.y + 24, 220, 24},
-            17, ink, 700);
-      label(surface, "Arche Agent OS 原生工作台",
-            {brand_card.x + 80, brand_card.y + 52, 280, 20}, 10, secondary, 450);
-      label(surface, "White · Yoga · Skia · SDL3",
-            {brand_card.x + 80, brand_card.y + 77, 300, 18}, 9, muted, 450);
-      const float info_y = brand_card.y + 144;
-      label(surface, "版本", {content.x + 10, info_y, 110, 20}, 10, muted, 450);
-      label(surface, "development", {content.x + 150, info_y, 240, 20}, 10,
-            ink, 550);
-      label(surface, "渲染后端", {content.x + 10, info_y + 42, 110, 20}, 10,
-            muted, 450);
-      label(surface, "Skia GPU / CPU", {content.x + 150, info_y + 42, 240, 20},
-            10, ink, 550);
-      label(surface, "架构", {content.x + 10, info_y + 84, 110, 20}, 10, muted,
-            450);
-      label(surface, "插件化微内核", {content.x + 150, info_y + 84, 240, 20},
-            10, ink, 550);
-    }
-
-    const Rect footer{modal.x + navigation_width + 36,
-                      modal.y + modal.height - 60,
-                      modal.width - navigation_width - 54, 44};
-    surface.line(footer.x, footer.y - 5, footer.x + footer.width, footer.y - 5,
-                 hairline);
-    const Rect cancel{footer.x + footer.width - 178, footer.y + 4, 76, 32};
-    const Rect save{footer.x + footer.width - 92, footer.y + 4, 82, 32};
-    button(cancel, "取消", WorkbenchActionKind::close_settings);
-    button(save, "保存设置", WorkbenchActionKind::save_settings, true);
-  }
-  active_hover_region_ = hover_region_at(pointer_x_, pointer_y_);
   if (partial_redraw) surface.pop_clip();
   pending_damage_.reset();
   full_redraw_pending_ = false;
@@ -3208,34 +2293,20 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
         request_redraw(settings_editor_bounds_);
         selecting_input_ = true;
         selecting_editor_ = "settings";
-        return {WorkbenchActionKind::focus_settings_field,
-                settings_editor_field_, 0,
-                editor_offset_at(event.x, event.y, settings_editor_bounds_,
-                                 settings_editor_text_),
-                false};
+        return {WorkbenchActionKind::focus_settings_field, settings_editor_field_, 0,
+                editor_offset_at(event.x, event.y, settings_editor_bounds_, settings_editor_text_), false};
       }
       selecting_input_ = false;
       selecting_editor_.clear();
       return {};
     }
-    if (archive_open_) {
-      if (filter_editor_bounds_.contains(event.x, event.y)) {
-        request_redraw(filter_editor_bounds_);
-        selecting_input_ = true;
-        selecting_filter_ = true;
-        selecting_editor_ = "filter";
-        return {WorkbenchActionKind::focus_filter,
-                {},
-                0,
-                editor_offset_at(event.x, event.y, filter_editor_bounds_,
-                                 filter_editor_text_),
-                false};
-      }
-      selecting_input_ = false;
-      selecting_editor_.clear();
-      return {};
+    if (trajectory_open_ && trajectory_search_bounds_.contains(event.x, event.y)) {
+      request_redraw(trajectory_search_bounds_);
+      selecting_input_ = true;
+      selecting_editor_ = "trajectory";
+      return {WorkbenchActionKind::focus_trajectory_search, {}, 0,
+              editor_offset_at(event.x, event.y, trajectory_search_bounds_, trajectory_search_text_), false};
     }
-    if (plugins_open_) return {};
     if (last_layout_.sidebar_splitter.contains(event.x, event.y)) {
       request_redraw();
       resizing_sidebar_ = true;
@@ -3257,40 +2328,14 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
       selecting_input_ = true;
       selecting_filter_ = false;
       selecting_editor_ = "message";
-      return {WorkbenchActionKind::focus_message,
-              {},
-              0,
-              editor_offset_at(event.x, event.y, message_editor_bounds_,
-                               message_editor_text_),
-              false};
-    }
-    if (filter_editor_bounds_.contains(event.x, event.y)) {
-      request_redraw(filter_editor_bounds_);
-      selecting_input_ = true;
-      selecting_filter_ = true;
-      selecting_editor_ = "filter";
-      return {WorkbenchActionKind::focus_filter,
-              {},
-              0,
-              editor_offset_at(event.x, event.y, filter_editor_bounds_,
-                               filter_editor_text_),
-              false};
-    }
-    if (trajectory_search_bounds_.contains(event.x, event.y)) {
-      request_redraw(trajectory_search_bounds_);
-      selecting_input_ = true;
-      selecting_editor_ = "trajectory";
-      return {WorkbenchActionKind::focus_trajectory_search,
-              {},
-              0,
-              editor_offset_at(event.x, event.y, trajectory_search_bounds_,
-                               trajectory_search_text_),
-              false};
+      return {WorkbenchActionKind::focus_message, {}, 0,
+              editor_offset_at(event.x, event.y, message_editor_bounds_, message_editor_text_), false};
     }
     selecting_input_ = false;
     selecting_editor_.clear();
     return {};
   }
+
   if (event.type == "pointermove") {
     const auto previous_hover_region = active_hover_region_;
     const auto next_hover_region = hover_region_at(event.x, event.y);
@@ -3304,71 +2349,50 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
     pointer_x_ = event.x;
     pointer_y_ = event.y;
     active_hover_region_ = next_hover_region;
+
     if (resizing_sidebar_) {
-      const auto content_reserve =
-          last_layout_.menu_bar.width >= viewer_visible_breakpoint &&
-                  !viewer_collapsed_
-              ? 940.0F
-              : 640.0F;
-      const auto max_sidebar =
-          std::max(176.0F, last_layout_.menu_bar.width - content_reserve);
+      const auto max_sidebar = std::max(176.0F, last_layout_.menu_bar.width - 600.0F);
       const auto next_width = std::clamp(event.x, 176.0F, max_sidebar);
-      const bool changed = next_width != sidebar_width_ || sidebar_collapsed_ ||
-                           !sidebar_manually_sized_;
+      const bool changed = next_width != sidebar_width_ || sidebar_collapsed_ || !sidebar_manually_sized_;
       sidebar_width_ = next_width;
       sidebar_collapsed_ = false;
       sidebar_manually_sized_ = true;
       if (changed) request_redraw();
-      return {changed ? WorkbenchActionKind::redraw
-                      : WorkbenchActionKind::none,
-              {}, 0, 0, false, true};
+      return {changed ? WorkbenchActionKind::redraw : WorkbenchActionKind::none, {}, 0, 0, false, true};
     }
     if (resizing_viewer_) {
-      const auto available =
-          last_layout_.menu_bar.width - last_layout_.sidebar.width;
-      const auto max_viewer = std::max(320.0F, available - 500.0F);
-      const auto next_width = std::clamp(
-          last_layout_.menu_bar.width - event.x, 320.0F, max_viewer);
-      const bool changed = next_width != viewer_width_ || viewer_collapsed_ ||
-                           !viewer_manually_sized_;
+      const auto available = last_layout_.menu_bar.width - last_layout_.sidebar.width;
+      const auto max_viewer = std::max(320.0F, available - 400.0F);
+      const auto next_width = std::clamp(last_layout_.menu_bar.width - event.x, 320.0F, max_viewer);
+      const bool changed = next_width != viewer_width_ || viewer_collapsed_ || !viewer_manually_sized_;
       viewer_width_ = next_width;
       viewer_collapsed_ = false;
       viewer_manually_sized_ = true;
       if (changed) request_redraw();
-      return {changed ? WorkbenchActionKind::redraw
-                      : WorkbenchActionKind::none,
-              {}, 0, 0, false, true};
+      return {changed ? WorkbenchActionKind::redraw : WorkbenchActionKind::none, {}, 0, 0, false, true};
     }
     if (selecting_input_) {
-      const auto &bounds =
-          selecting_editor_ == "settings"     ? settings_editor_bounds_
-          : selecting_editor_ == "trajectory" ? trajectory_search_bounds_
-          : selecting_editor_ == "filter"     ? filter_editor_bounds_
-                                              : message_editor_bounds_;
-      const auto &text = selecting_editor_ == "settings" ? settings_editor_text_
-                         : selecting_editor_ == "trajectory"
-                             ? trajectory_search_text_
-                         : selecting_editor_ == "filter" ? filter_editor_text_
-                                                         : message_editor_text_;
+      const auto &bounds = (selecting_editor_ == "settings" ? settings_editor_bounds_ : message_editor_bounds_);
+      const auto &text = (selecting_editor_ == "settings" ? settings_editor_text_ : message_editor_text_);
       const auto cursor = editor_offset_at(event.x, event.y, bounds, text);
       if (cursor == editor_cursor_) return {};
       editor_cursor_ = cursor;
       request_redraw(bounds);
-      return {WorkbenchActionKind::set_editor_cursor,           {},   0,
-              cursor, true, false};
+      return {WorkbenchActionKind::set_editor_cursor, {}, 0, cursor, true, false};
     }
+
     const bool over_splitter =
         last_layout_.sidebar_splitter.contains(event.x, event.y) ||
         last_layout_.viewer_splitter.contains(event.x, event.y);
     WorkbenchAction result;
-    result.kind = hover_changed ? WorkbenchActionKind::redraw
-                                : WorkbenchActionKind::none;
+    result.kind = hover_changed ? WorkbenchActionKind::redraw : WorkbenchActionKind::none;
     if (over_splitter != pointer_cursor_active_) {
       pointer_cursor_active_ = over_splitter;
       result.pointer_cursor = over_splitter;
     }
     return result;
   }
+
   if (event.type == "pointerleave") {
     const bool hover_changed = active_hover_region_.has_value();
     if (active_hover_region_ && *active_hover_region_ < hover_regions_.size())
@@ -3377,46 +2401,26 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
     pointer_y_ = -1;
     active_hover_region_.reset();
     WorkbenchAction result;
-    result.kind = hover_changed ? WorkbenchActionKind::redraw
-                                : WorkbenchActionKind::none;
+    result.kind = hover_changed ? WorkbenchActionKind::redraw : WorkbenchActionKind::none;
     if (pointer_cursor_active_) {
       pointer_cursor_active_ = false;
       result.pointer_cursor = false;
     }
     return result;
   }
+
   if (event.type == "wheel") {
     if (settings_open_ || archive_open_ || plugins_open_) return {};
-    if (last_layout_.sidebar.contains(event.x, event.y) && event.y >= 301) {
-      const auto next = std::clamp(session_scroll_ + event.delta_y, 0.0F,
-                                   session_max_scroll_);
-      if (next == session_scroll_) return {};
-      session_scroll_ = next;
-      request_redraw(last_layout_.sidebar);
-      return {WorkbenchActionKind::redraw};
-    }
-    if (trajectory_open_ &&
-        last_layout_.conversation.contains(event.x, event.y) &&
-        event.y >= last_layout_.conversation.y + 63) {
-      const auto next = std::clamp(trajectory_scroll_ + event.delta_y, 0.0F,
-                                   trajectory_max_scroll_);
-      if (next == trajectory_scroll_) return {};
-      trajectory_scroll_ = next;
-      request_redraw(last_layout_.conversation);
-      return {WorkbenchActionKind::redraw};
-    }
     if (last_layout_.timeline.contains(event.x, event.y)) {
-      const auto next = std::clamp(timeline_scroll_ + event.delta_y, 0.0F,
-                                   timeline_max_scroll_);
+      const auto next = std::clamp(timeline_scroll_ + event.delta_y, 0.0F, timeline_max_scroll_);
       if (next == timeline_scroll_) return {};
       timeline_scroll_ = next;
-      follow_tail_ = timeline_scroll_ >= timeline_max_scroll_ - 2;
+      follow_tail_ = (timeline_scroll_ >= timeline_max_scroll_ - 2);
       request_redraw(last_layout_.timeline);
       return {WorkbenchActionKind::redraw};
     }
     if (last_layout_.document.contains(event.x, event.y)) {
-      const auto next = std::clamp(document_scroll_ + event.delta_y, 0.0F,
-                                   document_max_scroll_);
+      const auto next = std::clamp(document_scroll_ + event.delta_y, 0.0F, document_max_scroll_);
       if (next == document_scroll_) return {};
       document_scroll_ = next;
       request_redraw(last_layout_.document);
@@ -3424,10 +2428,10 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
     }
     return {};
   }
+
   if (event.type != "click")
     return {};
-  // Clicks can open overlays or change product state through many commands;
-  // conservatively repaint once. Pointer motion and scrolling stay regional.
+
   request_redraw();
   if (resizing_sidebar_ || resizing_viewer_) {
     resizing_sidebar_ = false;
@@ -3443,7 +2447,8 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
     selecting_editor_.clear();
     return {};
   }
-  const Rect menu_headers{dp(160), dp(13), dp(228), dp(38)};
+
+  const Rect menu_headers{128, 10, 222, 38};
   if (!active_menu_.empty() && !open_menu_bounds_.contains(event.x, event.y) &&
       !menu_headers.contains(event.x, event.y)) {
     active_menu_.clear();
@@ -3459,11 +2464,12 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
       return {WorkbenchActionKind::redraw};
     }
   }
+
   for (const auto &target : std::views::reverse(hits_)) {
     if (!target.bounds.contains(event.x, event.y))
       continue;
     if (target.action == WorkbenchActionKind::toggle_menu) {
-      active_menu_ = active_menu_ == target.value ? "" : target.value;
+      active_menu_ = (active_menu_ == target.value ? "" : target.value);
       return {WorkbenchActionKind::redraw};
     }
     if (target.action == WorkbenchActionKind::toggle_left_panel) {
@@ -3520,20 +2526,12 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
     if (target.action == WorkbenchActionKind::save_settings) {
       return {WorkbenchActionKind::save_settings};
     }
-    if (target.action == WorkbenchActionKind::open_config_file) {
-      profile_menu_open_ = false;
-      settings_open_ = false;
-      archive_open_ = false;
-      plugins_open_ = false;
-      return {WorkbenchActionKind::open_config_file};
-    }
     if (target.action == WorkbenchActionKind::settings_tab) {
       settings_tab_ = target.value;
       return {WorkbenchActionKind::settings_tab, target.value};
     }
     if (target.action == WorkbenchActionKind::show_conversation) {
       trajectory_open_ = false;
-      trajectory_search_bounds_ = {};
       return {WorkbenchActionKind::show_conversation};
     }
     if (target.action == WorkbenchActionKind::show_trajectory) {
@@ -3544,43 +2542,15 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
       viewer_tab_ = target.value;
       return {WorkbenchActionKind::viewer_tab, target.value};
     }
-    if (target.action == WorkbenchActionKind::set_trajectory_filter) {
-      trajectory_filter_ = target.value;
-      trajectory_scroll_ = 0;
-      return {WorkbenchActionKind::redraw};
-    }
-    if (target.action == WorkbenchActionKind::toggle_trajectory_event) {
-      const auto seq = static_cast<std::uint64_t>(target.index);
-      if (expanded_trajectory_events_.contains(seq))
-        expanded_trajectory_events_.erase(seq);
-      else
-        expanded_trajectory_events_.insert(seq);
-      return {WorkbenchActionKind::redraw};
-    }
-    active_menu_.clear();
     if (target.action == WorkbenchActionKind::scroll_to_tail) {
       timeline_scroll_ = timeline_max_scroll_;
       follow_tail_ = true;
       return {WorkbenchActionKind::redraw};
     }
-    if (!target.file.empty()) {
-      if (target.close_tab) {
-        close_document(target.file);
-        return {WorkbenchActionKind::redraw};
-      }
-      if (target.directory) {
-        if (expanded_directories_.contains(target.file))
-          expanded_directories_.erase(target.file);
-        else
-          expanded_directories_.insert(target.file);
-        refresh_files(last_filter_);
-        return {WorkbenchActionKind::redraw};
-      }
-      open_document(target.file);
-      return {WorkbenchActionKind::redraw};
-    }
+    active_menu_.clear();
     return {target.action, target.value, target.index};
   }
+
   if (!active_menu_.empty()) {
     active_menu_.clear();
     return {WorkbenchActionKind::redraw};
