@@ -8,6 +8,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -69,6 +70,17 @@ public:
   void set_draw_callback(DrawCallback callback);
   void set_submit_callback(SubmitCallback callback);
   void set_event_callback(EventCallback callback);
+  // Borderless windows need an explicit native title-bar drag region. The
+  // product supplies the quiet span of its header in logical UI units; the
+  // SDL hit test converts it to window coordinates. An empty region falls
+  // back to the legacy static application-bar strip.
+  void set_drag_region(std::optional<Rect> region) noexcept {
+    drag_region_ = region;
+  }
+  [[nodiscard]] const std::optional<Rect>&
+  drag_region() const noexcept {
+    return drag_region_;
+  }
   [[nodiscard]] bool set_icon(const RasterSurface& icon);
   void set_builtin_chrome(bool enabled);
   void set_pointer_cursor(bool pointer);
@@ -112,6 +124,7 @@ private:
   void handle_key(std::uint32_t key, std::uint16_t modifiers);
 
   WindowOptions options_;
+  std::optional<Rect> drag_region_;
   SDL_Window* window_{nullptr};
   SDL_Renderer* renderer_{nullptr};
   SDL_Texture* texture_{nullptr};

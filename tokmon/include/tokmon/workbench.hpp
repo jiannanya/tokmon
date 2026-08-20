@@ -81,8 +81,11 @@ struct WorkbenchFrame {
   }
 };
 
+// Layout regions for the flush Tokmon UI 3.0 shell (docs/Tokmon UI): a
+// resizable left navigation rail, the main conversation/trajectory column,
+// and the right code-inspector panel. Window chrome floats above everything.
 struct WorkbenchLayout {
-  white::Rect menu_bar;
+  white::Rect bounds;
   white::Rect sidebar;
   white::Rect conversation;
   white::Rect conversation_header;
@@ -94,7 +97,7 @@ struct WorkbenchLayout {
   white::Rect explorer;
   white::Rect sidebar_splitter;
   white::Rect viewer_splitter;
-  bool compact_sidebar{false};
+  bool sidebar_visible{false};
   bool viewer_visible{false};
   friend bool operator==(const WorkbenchLayout&,
                          const WorkbenchLayout&) = default;
@@ -162,12 +165,14 @@ struct WorkbenchAction {
 // durable trajectory remains the canonical Agent state.
 class WorkbenchView final {
 public:
-  static constexpr int sidebar_compact_breakpoint = 1040;
   // Logical-width threshold below which the workspace viewer is force-hidden.
   // Must stay at or below the default window's logical width
   // (window_width / ui_scale = 1500 / 1.25 = 1200) so the viewer — and its
   // expand affordance — remain reachable at the shipped default geometry.
-  static constexpr int viewer_visible_breakpoint = 1160;
+  // 880 logical units corresponds to roughly 1100 design pixels at the
+  // shipped scale, matching the minimum width at which the Figma three-column
+  // layout (240 + 400 + 440 plus splitters) remains usable.
+  static constexpr int viewer_visible_breakpoint = 880;
 
   explicit WorkbenchView(
       std::filesystem::path workspace,
@@ -184,6 +189,12 @@ public:
   bool show_document(const std::filesystem::path &path);
   void set_viewer_collapsed(bool collapsed) noexcept { viewer_collapsed_ = collapsed; }
   void close_settings() noexcept { settings_open_ = false; }
+  // Quiet span of the main header that the borderless window treats as its
+  // native title-bar drag region (logical UI units, recomputed each draw).
+  [[nodiscard]] const std::optional<white::Rect> &
+  drag_region() const noexcept {
+    return drag_region_;
+  }
   // Headless capture helpers: drive presentation-only state so a single
   // rendered frame can exercise the settings modal or trajectory inspector.
   void open_settings_preset(std::string tab) {
@@ -193,12 +204,6 @@ public:
   void set_trajectory_open(bool open) noexcept { trajectory_open_ = open; }
 
 private:
-  struct FileEntry {
-    std::filesystem::path relative;
-    std::string label;
-    bool directory{false};
-    std::size_t depth{0};
-  };
   struct HitTarget {
     white::Rect bounds;
     WorkbenchActionKind action{WorkbenchActionKind::none};
@@ -209,7 +214,6 @@ private:
     bool close_tab{false};
   };
 
-  void refresh_files(std::string_view filter = {});
   void open_document(const std::filesystem::path &relative);
   void close_document(const std::filesystem::path &relative);
   [[nodiscard]] std::size_t editor_offset_at(float x, float y,
@@ -223,9 +227,7 @@ private:
   std::filesystem::path workspace_;
   std::unique_ptr<WorkbenchDocument> shell_;
   std::filesystem::path selected_document_;
-  std::vector<FileEntry> files_;
   std::vector<std::filesystem::path> open_documents_;
-  std::set<std::filesystem::path> expanded_directories_;
   std::vector<std::string> document_lines_;
   std::vector<HitTarget> hits_;
   std::vector<white::Rect> hover_regions_;
@@ -236,24 +238,18 @@ private:
   float timeline_max_scroll_{0};
   float document_scroll_{0};
   float document_max_scroll_{0};
-  float session_scroll_{0};
-  float session_max_scroll_{0};
-  float pointer_x_{-1};
-  float pointer_y_{-1};
-  float sidebar_width_{278.5F};
-  float viewer_width_{0};
-  std::size_t previous_item_count_{0};
-  std::size_t previous_trajectory_event_count_{0};
-  std::string active_menu_;
-  std::string settings_tab_{"general"};
-  std::string trajectory_filter_{"all"};
-  std::set<std::uint64_t> expanded_trajectory_events_;
   float trajectory_scroll_{0};
   float trajectory_max_scroll_{0};
-  bool profile_menu_open_{false};
+  float pointer_x_{-1};
+  float pointer_y_{-1};
+  // White uses logical units; 192 maps to the Figma Make sidebar's 240 px
+  // default width at the shipped 1.25 UI scale.
+  float sidebar_width_{192};
+  float viewer_width_{0};
+  std::size_t previous_item_count_{0};
+  std::string settings_tab_{"general"};
+  std::string trajectory_filter_{"all"};
   bool settings_open_{false};
-  bool archive_open_{false};
-  bool plugins_open_{false};
   bool trajectory_open_{false};
   bool follow_tail_{true};
   bool sidebar_collapsed_{false};
@@ -264,19 +260,31 @@ private:
   bool resizing_viewer_{false};
   bool pointer_cursor_active_{false};
   bool selecting_input_{false};
+  // Presentation-only state for the Tokmon UI shell.
+  std::set<std::string> tree_collapsed_{"g1/音频切片处理", "g3"};
+  bool workflow_expanded_{true};
+  // 0 = closed, 1 = access, 2 = model, 3 = reasoning, 4 = context.
+  int composer_menu_{0};
+  std::string selected_access_{"完全访问"};
+  std::string selected_reasoning_{"最高"};
+  std::size_t selected_trajectory_event_{1};
+  int trajectory_detail_tab_{0};
+  bool viewer_file_menu_{false};
+  std::string viewer_demo_file_{"transcribe.py"};
   white::Rect message_editor_bounds_;
   white::Rect filter_editor_bounds_;
   white::Rect settings_editor_bounds_;
   white::Rect trajectory_search_bounds_;
-  white::Rect open_menu_bounds_;
-  white::Rect profile_menu_bounds_;
   white::Rect settings_modal_bounds_;
+  white::Rect composer_menu_bounds_;
+  white::Rect viewer_menu_bounds_;
+  std::optional<white::Rect> drag_region_;
   std::string message_editor_text_;
   std::string filter_editor_text_;
   std::string settings_editor_text_;
   std::string settings_editor_field_;
   std::string trajectory_search_text_;
-  std::string viewer_tab_{"workspace"};
+  std::string viewer_tab_{"code"};
   std::size_t editor_cursor_{0};
   bool selecting_filter_{false};
   std::string selecting_editor_;

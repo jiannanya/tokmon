@@ -54,7 +54,6 @@ WorkbenchRegions WorkbenchDocument::layout(float width, float height,
   }
   view_->layout(width, height);
   WorkbenchRegions result;
-  result.menu_bar = region(document, "menu-bar");
   result.sidebar = state.sidebar_visible ? region(document, "sidebar")
                                          : white::Rect{};
   result.conversation = region(document, "conversation");

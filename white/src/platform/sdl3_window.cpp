@@ -76,8 +76,21 @@ SDL_HitTestResult SDLCALL borderless_hit_test(SDL_Window* window,
     if (top) return SDL_HITTEST_RESIZE_TOP;
     if (bottom) return SDL_HITTEST_RESIZE_BOTTOM;
   }
-  // Menus and window controls remain normal hit targets. The quiet center of
-  // Tokmon's application bar behaves as the native title-bar drag region.
+  // The product supplies a precise header drag region in logical UI units;
+  // convert it to window coordinates. Menus and window controls remain normal
+  // hit targets.
+  if (owner && owner->drag_region().has_value()) {
+    const auto& region = *owner->drag_region();
+    const auto left = region.x * content_scale;
+    const auto top = region.y * content_scale;
+    const auto right = (region.x + region.width) * content_scale;
+    const auto bottom = (region.y + region.height) * content_scale;
+    if (point->x >= left && point->x < right && point->y >= top &&
+        point->y < bottom)
+      return SDL_HITTEST_DRAGGABLE;
+    return SDL_HITTEST_NORMAL;
+  }
+  // Legacy fallback: the quiet center of a classic application bar.
   if (point->y < scaled_dimension(44, content_scale) &&
       point->x >= scaled_dimension(340, content_scale) &&
       point->x < width - scaled_dimension(320, content_scale))

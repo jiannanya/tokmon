@@ -18,7 +18,6 @@ struct WorkbenchShellState {
 };
 
 struct WorkbenchRegions {
-  white::Rect menu_bar;
   white::Rect sidebar;
   white::Rect conversation;
   white::Rect conversation_header;

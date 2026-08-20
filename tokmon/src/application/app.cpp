@@ -154,7 +154,6 @@ App::App(AppConfig config)
       approvals_(std::make_shared<ApprovalCoordinator>()),
       projection_(std::make_shared<Projection>()) {
   settings_ = load_desktop_settings(config_.workspace, config_.config_dir_name);
-  workbench_->set_viewer_collapsed(true);
   if (config_.model.empty())
     config_.model = settings_.model;
   config_.max_steps =
@@ -1422,6 +1421,7 @@ void App::draw(white::RasterSurface &surface) {
   frame.selection_end = editor.selection_end;
   frame.caret_visible = editor.caret_visible;
   workbench_->draw(surface, frame);
+  window_->set_drag_region(workbench_->drag_region());
 }
 
 std::shared_ptr<snow::ModelProvider> App::create_model() const {
