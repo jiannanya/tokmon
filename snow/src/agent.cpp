@@ -362,6 +362,11 @@ std::vector<SessionSummary> Agent::sessions(std::size_t limit) const {
   return journal_->sessions(limit);
 }
 
+bool Agent::set_session_title(const tokmon::SessionId& session,
+                              std::string_view title) {
+  return journal_->set_session_title(session, title);
+}
+
 tokmon::Json Agent::transcript(const tokmon::SessionId& session) const {
   tokmon::Json result = tokmon::Json::array();
   for (const auto& item : surface_.project(journal_->events(session))) {

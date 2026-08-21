@@ -76,6 +76,10 @@ public:
       const tokmon::SessionId& session) const;
   bool set_session_title_from_prompt(const tokmon::SessionId& session,
                                      std::string_view prompt);
+  // Forces the session title, unlike set_session_title_from_prompt which only
+  // fills an empty one. Used by the desktop UI rename affordance.
+  bool set_session_title(const tokmon::SessionId& session,
+                         std::string_view title);
   [[nodiscard]] std::uint64_t last_seq(
       const tokmon::SessionId& session) const;
   [[nodiscard]] bool session_exists(const tokmon::SessionId& session) const;

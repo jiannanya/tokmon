@@ -41,6 +41,7 @@ constexpr Color hover_quiet{245, 245, 244, 255};          // #f5f5f4
 constexpr Color selected_fill{254, 243, 214, 255};        // #fef3d6
 constexpr Color selected_border{253, 230, 138, 255};      // #fde68a
 constexpr Color gold_accent{245, 166, 35, 255};           // #f5a623
+constexpr Color gold_focus{245, 158, 11, 255};            // #f59e0b (Figma focus/active borders)
 constexpr Color amber{217, 119, 6, 255};                  // #d97706
 constexpr Color amber_deep{180, 83, 9, 255};              // #b45309
 constexpr Color gold_dark{133, 87, 2, 255};               // #855702
@@ -52,10 +53,12 @@ constexpr Color success_deep{22, 163, 74, 255};           // #16a34a
 constexpr Color success_text{21, 128, 61, 255};           // #15803d
 constexpr Color success_bg{240, 253, 244, 255};           // #f0fdf4
 constexpr Color success_border{187, 247, 208, 255};       // #bbf7d0
-constexpr Color danger{239, 68, 68, 255};                 // #ef4444
+constexpr Color danger{220, 38, 38, 255};                 // #dc2626 (Figma red-600)
 constexpr Color info_blue{2, 132, 199, 255};              // #0284c7
-constexpr Color keyword_purple{107, 33, 168, 255};        // purple-700
-constexpr Color string_emerald{4, 120, 87, 255};          // emerald-700
+constexpr Color keyword_purple{130, 0, 219, 255};         // #8200db (Figma fill_eaef5054)
+constexpr Color string_emerald{0, 122, 85, 255};          // #007a55 (Figma fill_ccde559c)
+constexpr Color docstring_orange{187, 77, 0, 255};        // #bb4d00 (Figma docstring)
+constexpr Color comment_gray{153, 161, 175, 255};         // #99a1af (Figma comment)
 
 constexpr float design_density = 0.8F;
 constexpr float dp(float value) { return value * design_density; }
@@ -682,11 +685,11 @@ std::vector<white::RichTextSpan> code_spans(std::string_view line,
       first_char == std::string_view::npos ? std::string_view{}
                                            : line.substr(first_char);
   if (trimmed.starts_with('#') || trimmed.starts_with("//")) {
-    push(line, faint, 400);
+    push(line, comment_gray, 400);
     return spans;
   }
   if (line.find("\"\"\"") != std::string_view::npos) {
-    push(line, amber_deep, 550);
+    push(line, docstring_orange, 500);
     return spans;
   }
   std::size_t cursor = 0;
@@ -703,7 +706,7 @@ std::vector<white::RichTextSpan> code_spans(std::string_view line,
       continue;
     }
     if (line[cursor] == '#') {
-      push(line.substr(cursor), faint, 400);
+      push(line.substr(cursor), comment_gray, 400);
       break;
     }
     if (std::isalpha(static_cast<unsigned char>(line[cursor])) ||
@@ -924,10 +927,13 @@ void draw_icon(RasterSurface &surface, std::string_view name, float x, float y,
   } else if (name == "window-close" || name == "x") {
     surface.line(x - 4, y - 4, x + 4, y + 4, color, 1.2F);
     surface.line(x + 4, y - 4, x - 4, y + 4, color, 1.2F);
-  } else if (name == "edit") {
-    surface.line(x - 4, y + 4, x + 3, y - 3, color, 1.3F);
-    surface.line(x + 3, y - 3, x + 5, y - 1, color, 1.3F);
-    surface.line(x - 5, y + 5, x - 2, y + 4, color, 1.2F);
+  } else if (name == "edit" || name == "pen") {
+    // Lucide "pen" (Figma lucide-pen): two body edges converging at the
+    // rounded tip plus a small nib triangle at the lower left.
+    surface.line(x - 4.5F, y + 2.5F, x + 5, y - 3, color, 1.3F);
+    surface.line(x - 2.5F, y + 4.5F, x + 5, y - 3, color, 1.3F);
+    surface.line(x - 4.5F, y + 2.5F, x - 5.5F, y + 5.5F, color, 1.2F);
+    surface.line(x - 5.5F, y + 5.5F, x - 2.5F, y + 4.5F, color, 1.2F);
   } else if (name == "down") {
     surface.line(x - 4, y - 2, x, y + 2, color, 1.4F);
     surface.line(x, y + 2, x + 4, y - 2, color, 1.4F);
@@ -1051,6 +1057,7 @@ std::size_t frame_content_key(const WorkbenchFrame &frame) {
   text(frame.status);
   text(frame.message_input);
   text(frame.file_filter);
+  text(frame.rename_draft);
   text(frame.model);
   text(frame.trajectory_search);
   text(frame.active_settings_field);
@@ -1063,6 +1070,8 @@ std::size_t frame_content_key(const WorkbenchFrame &frame) {
   hash_frame_value(seed, frame.turn_active);
   hash_frame_value(seed, frame.message_focused);
   hash_frame_value(seed, frame.filter_focused);
+  hash_frame_value(seed, frame.rename_active);
+  hash_frame_value(seed, frame.rename_focused);
   hash_frame_value(seed, frame.trajectory_search_focused);
   hash_frame_value(seed, frame.settings_field_focused);
   hash_frame_value(seed, frame.window_maximized);
@@ -1404,7 +1413,7 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
     const Rect search_box{sx + dp(12), side.y + dp(128), sw - dp(24), dp(30)};
     surface.fill_rect(search_box, {240, 238, 232, 255}, dp(10));
     surface.stroke_rect(search_box,
-                        frame.filter_focused ? gold_accent
+                        frame.filter_focused ? gold_focus
                                              : Color{240, 238, 232, 255},
                         1, dp(10));
     draw_icon(surface, "search", search_box.x + dp(15),
@@ -1623,14 +1632,35 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
   const float title_width =
       std::min(visual_units(title_str) * dp(7.6F),
                conversation.width - (title_x - conversation.x) - dp(240));
-  label(surface, title_str,
-        {title_x, conversation.y + dp(13), title_width, dp(22)}, 14, ink, 620);
+  const Rect title_rect{title_x, conversation.y + dp(13), title_width, dp(22)};
+  if (frame.rename_active) {
+    // Inline rename editor over the title (Figma 修改会话名称 affordance).
+    rename_editor_bounds_ = title_rect;
+    rename_editor_text_ = frame.rename_draft;
+    surface.fill_rect(title_rect, panel, dp(5));
+    surface.stroke_rect(title_rect, gold_focus, 1, dp(5));
+    const Rect text_bounds{title_rect.x + dp(8), title_rect.y + dp(1),
+                           title_rect.width - dp(16), title_rect.height - dp(2)};
+    if (frame.rename_draft.empty()) {
+      label(surface, "输入会话名称...", text_bounds, 13, faint);
+    } else {
+      draw_editor_text(surface, frame.rename_draft, text_bounds,
+                       frame.editor_cursor, frame.selection_start,
+                       frame.selection_end, frame.rename_focused,
+                       frame.caret_visible, 13.0F, 1);
+    }
+  } else {
+    label(surface, title_str, title_rect, 14, ink, 620);
+    rename_editor_bounds_ = {};
+  }
   const Rect edit_btn{title_x + title_width + dp(4), conversation.y + dp(13),
                       dp(26), dp(22)};
   if (hovered(edit_btn))
     surface.fill_rect(edit_btn, hover_fill, dp(5));
-  draw_icon(surface, "edit", edit_btn.x + dp(11), edit_btn.y + dp(10), faint);
-  hits_.push_back({edit_btn, WorkbenchActionKind::copy_text, {}, title_str});
+  draw_icon(surface, "edit", edit_btn.x + dp(11), edit_btn.y + dp(10),
+            frame.rename_active ? amber : faint);
+  hits_.push_back({edit_btn, WorkbenchActionKind::focus_rename, {},
+                   title_str});
 
   const bool can_expand_viewer =
       !last_layout_.viewer_visible &&
@@ -1660,17 +1690,21 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
                             WorkbenchActionKind action, std::string value) {
     const float text_w = visual_units(text) * dp(12.0F);
     const Rect tab{tab_x, conversation.y + dp(46), text_w + dp(16), dp(38)};
+    const Rect text_rect{tab.x, tab.y + (tab.height - dp(20)) / 2,
+                         tab.width, dp(20)};
     if (active) {
-      label(surface, text, tab, 13, amber_deep, 700, 1,
+      label(surface, text, text_rect, 13, amber_deep, 700, 1,
             white::TextAlign::center);
       surface.fill_rect({tab.x + dp(8), tabs_bottom - dp(5),
                          tab.width - dp(16), dp(3)},
                         amber, dp(1.5F));
     } else {
       if (hovered(tab))
-        label(surface, text, tab, 13, ink, 500, 1, white::TextAlign::center);
+        label(surface, text, text_rect, 13, ink, 500, 1,
+              white::TextAlign::center);
       else
-        label(surface, text, tab, 13, muted, 500, 1, white::TextAlign::center);
+        label(surface, text, text_rect, 13, muted, 500, 1,
+              white::TextAlign::center);
     }
     hits_.push_back({tab, action, {}, value});
     tab_x += tab.width + dp(8);
@@ -2129,7 +2163,7 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
                       metrics_card.y + dp(8), dp(196), dp(30)};
     const bool trace_focused = frame.trajectory_search_focused;
     surface.fill_rect(search, sidebar_background, dp(8));
-    surface.stroke_rect(search, trace_focused ? gold_accent : hairline, 1,
+    surface.stroke_rect(search, trace_focused ? gold_focus : hairline, 1,
                         dp(8));
     draw_icon(surface, "search", search.x + dp(13), search.y + dp(15), faint);
     trajectory_search_bounds_ = {search.x + dp(26), search.y + dp(7),
@@ -2778,21 +2812,27 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
     surface.line(viewer.x, viewer.y, viewer.x, viewer.y + viewer.height,
                  hairline);
 
-    // Tabs: 代码审阅 / 文件预览.
-    float vtab_x = viewer.x + dp(16);
+    // Tabs: 代码审阅 / 文件预览 (Figma: 46px design header, items-center).
+    const auto &viewer_header = last_layout_.viewer_header;
+    float vtab_x = viewer_header.x + dp(16);
     const auto viewer_tab = [&](std::string_view text, bool active,
                                 const std::string &id) {
       const float text_w = visual_units(text) * dp(12.2F);
-      const Rect tab{vtab_x, viewer.y, text_w + dp(16), 46};
+      const Rect tab{vtab_x, viewer_header.y, text_w + dp(16),
+                     viewer_header.height};
+      const Rect text_rect{tab.x, tab.y + (tab.height - dp(20)) / 2,
+                           tab.width, dp(20)};
       if (active) {
-        label(surface, text, tab, 12.5, amber_deep, 700, 1,
+        label(surface, text, text_rect, 13.5, amber_deep, 600, 1,
               white::TextAlign::center);
-        surface.fill_rect({tab.x + dp(6), viewer.y + 44, tab.width - dp(12), 2},
+        surface.fill_rect({tab.x + dp(6), tab.y + tab.height - dp(2),
+                           tab.width - dp(12), dp(2)},
                           amber, 1);
       } else if (hovered(tab)) {
-        label(surface, text, tab, 12.5, ink, 500, 1, white::TextAlign::center);
+        label(surface, text, text_rect, 13.5, ink, 500, 1,
+              white::TextAlign::center);
       } else {
-        label(surface, text, tab, 12.5, muted, 500, 1,
+        label(surface, text, text_rect, 13.5, muted, 500, 1,
               white::TextAlign::center);
       }
       hits_.push_back({tab, WorkbenchActionKind::viewer_tab, {}, id});
@@ -2800,14 +2840,15 @@ void WorkbenchView::draw(RasterSurface &surface, const WorkbenchFrame &frame) {
     };
     viewer_tab("代码审阅", viewer_tab_ == "code", "code");
     viewer_tab("文件预览", viewer_tab_ == "preview", "preview");
-    surface.line(viewer.x, viewer.y + 46, viewer.x + viewer.width,
-                 viewer.y + 46, hairline);
+    surface.line(viewer.x, viewer_header.y + viewer_header.height,
+                 viewer.x + viewer.width,
+                 viewer_header.y + viewer_header.height, hairline);
 
     // Sub header: file selector + diff stat.
-    const float sub_y = viewer.y + 46;
-    surface.fill_rect({viewer.x, sub_y, viewer.width, 38}, main_background);
-    surface.line(viewer.x, sub_y + 38, viewer.x + viewer.width, sub_y + 38,
-                 hairline);
+    const float sub_y = viewer_header.y + viewer_header.height;
+    surface.fill_rect({viewer.x, sub_y, viewer.width, dp(38)}, main_background);
+    surface.line(viewer.x, sub_y + dp(38), viewer.x + viewer.width,
+                 sub_y + dp(38), hairline);
     const bool has_real_doc =
         !selected_document_.empty() && selected_document_ != "Welcome" &&
         std::ranges::find(open_documents_, selected_document_) !=
@@ -3640,6 +3681,17 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
                                filter_editor_text_),
               false};
     }
+    if (rename_editor_bounds_.width > 0 &&
+        rename_editor_bounds_.contains(event.x, event.y)) {
+      request_redraw(rename_editor_bounds_);
+      selecting_input_ = true;
+      selecting_filter_ = false;
+      selecting_editor_ = "rename";
+      return {WorkbenchActionKind::focus_rename, {}, 0,
+              editor_offset_at(event.x, event.y, rename_editor_bounds_,
+                               rename_editor_text_),
+              false};
+    }
     if (last_layout_.sidebar_splitter.contains(event.x, event.y)) {
       request_redraw();
       resizing_sidebar_ = true;
@@ -3723,11 +3775,13 @@ WorkbenchAction WorkbenchView::dispatch(const white::UiEvent &event) {
       const auto &bounds =
           selecting_editor_ == "settings"  ? settings_editor_bounds_
           : selecting_editor_ == "filter"  ? filter_editor_bounds_
+          : selecting_editor_ == "rename"  ? rename_editor_bounds_
           : selecting_editor_ == "trajectory" ? trajectory_search_bounds_
                                               : message_editor_bounds_;
       const auto &text =
           selecting_editor_ == "settings"  ? settings_editor_text_
           : selecting_editor_ == "filter"  ? filter_editor_text_
+          : selecting_editor_ == "rename"  ? rename_editor_text_
           : selecting_editor_ == "trajectory" ? trajectory_search_text_
                                               : message_editor_text_;
       const auto cursor = editor_offset_at(event.x, event.y, bounds, text);

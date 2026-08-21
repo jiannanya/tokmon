@@ -18,6 +18,7 @@
 #include <optional>
 #include <stop_token>
 #include <thread>
+#include <map>
 #include <vector>
 
 namespace tokmon::desktop {
@@ -73,8 +74,9 @@ private:
   void switch_session(std::string session_id);
   void choose_attachments();
   void choose_document();
-  enum class InputMode { message, filter, trajectory_search, settings };
+  enum class InputMode { message, filter, rename, trajectory_search, settings };
   void set_input_mode(InputMode mode, std::string settings_field = {});
+  void apply_session_title(std::string title);
   void apply_setting(std::string value, std::size_t index);
   void export_trajectory();
   void persist_session() const;
@@ -116,6 +118,10 @@ private:
   std::vector<AttachedFile> attachments_;
   std::string message_draft_;
   std::string file_filter_;
+  std::string rename_draft_;
+  // Local renames for sessions served by a remote snow process, which has no
+  // rename RPC yet; reapplied whenever the session list refreshes.
+  std::map<std::string, std::string> session_title_overrides_;
   std::string trajectory_search_;
   DesktopSettings settings_;
   std::string active_settings_field_;

@@ -72,6 +72,8 @@ public:
       const tokmon::SessionId& session, std::uint64_t after = 0) const;
   [[nodiscard]] std::vector<SessionSummary> sessions(
       std::size_t limit = 100) const;
+  bool set_session_title(const tokmon::SessionId& session,
+                         std::string_view title);
   [[nodiscard]] tokmon::Json transcript(
       const tokmon::SessionId& session) const;
   [[nodiscard]] ReplayReport replay(

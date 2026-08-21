@@ -812,6 +812,8 @@ void App::handle_editor_submit(std::string value) {
     mode = input_mode_;
     if (mode == InputMode::filter)
       file_filter_ = value;
+    else if (mode == InputMode::rename)
+      rename_draft_ = value;
     else if (mode == InputMode::trajectory_search)
       trajectory_search_ = value;
     else if (mode == InputMode::settings) {
@@ -820,6 +822,11 @@ void App::handle_editor_submit(std::string value) {
     } else {
       message_draft_.clear();
     }
+  }
+  if (mode == InputMode::rename) {
+    apply_session_title(std::move(value));
+    set_input_mode(InputMode::message);
+    return;
   }
   if (mode != InputMode::message) {
     window_->set_input_text(std::move(value));
@@ -830,13 +837,46 @@ void App::handle_editor_submit(std::string value) {
   submit(std::move(value));
 }
 
-void App::set_input_mode(InputMode mode, std::string settings_field) {
-  const auto editor = window_->editor_snapshot();
+void App::apply_session_title(std::string title) {
+  const auto is_space = [](char value) {
+    return value == ' ' || value == '\t' || value == '\n' || value == '\r';
+  };
+  while (!title.empty() && is_space(title.front()))
+    title.erase(title.begin());
+  while (!title.empty() && is_space(title.back()))
+    title.pop_back();
+  if (title.empty()) {
+    update_status("Session name cannot be empty");
+    return;
+  }
+  if (embedded_snow_) {
+    try {
+      (void)embedded_snow_->agent().set_session_title(session_, title);
+    } catch (const std::exception &error) {
+      update_status("Rename failed: " + std::string(error.what()));
+      return;
+    }
+  }
+  const auto session_id = session_.str();
+  {
+    std::lock_guard lock(state_mutex_);
+    session_title_overrides_[session_id] = title;
+    for (auto &session : sessions_)
+      if (session.id == session_id)
+        session.title = title;
+    ++sessions_revision_;
+  }
+  update_status("Session renamed");
+}
+
+void App::set_input_mode(InputMode mode, std::string settings_field) {  const auto editor = window_->editor_snapshot();
   std::string next_value;
   {
     std::lock_guard lock(state_mutex_);
     if (input_mode_ == InputMode::filter)
       file_filter_ = editor.value;
+    else if (input_mode_ == InputMode::rename)
+      rename_draft_ = editor.value;
     else if (input_mode_ == InputMode::trajectory_search)
       trajectory_search_ = editor.value;
     else if (input_mode_ == InputMode::settings) {
@@ -850,6 +890,8 @@ void App::set_input_mode(InputMode mode, std::string settings_field) {
         mode == InputMode::settings ? std::move(settings_field) : "";
     if (mode == InputMode::filter)
       next_value = file_filter_;
+    else if (mode == InputMode::rename)
+      next_value = rename_draft_;
     else if (mode == InputMode::trajectory_search)
       next_value = trajectory_search_;
     else if (mode == InputMode::settings) {
@@ -1034,6 +1076,11 @@ void App::refresh_sessions() {
     }
     {
       std::lock_guard lock(state_mutex_);
+      for (auto &item : result) {
+        const auto override_it = session_title_overrides_.find(item.id);
+        if (override_it != session_title_overrides_.end())
+          item.title = override_it->second;
+      }
       sessions_ = std::move(result);
       ++sessions_revision_;
     }
@@ -1199,6 +1246,25 @@ bool App::handle_workbench_event(const white::UiEvent &event) {
     set_input_mode(InputMode::filter);
     window_->set_input_cursor(action.cursor, false);
     break;
+  case WorkbenchActionKind::focus_rename: {
+    std::string current_title;
+    {
+      std::lock_guard lock(state_mutex_);
+      const auto active = std::ranges::find(
+          sessions_, session_.str(), &WorkbenchSession::id);
+      if (active != sessions_.end())
+        current_title = active->title;
+    }
+    if (current_title.empty())
+      current_title = action.value;
+    {
+      std::lock_guard lock(state_mutex_);
+      rename_draft_ = std::move(current_title);
+    }
+    set_input_mode(InputMode::rename);
+    window_->set_input_cursor(rename_draft_.size(), false);
+    break;
+  }
   case WorkbenchActionKind::set_editor_cursor:
     window_->set_input_cursor(action.cursor, action.extend_selection);
     break;
@@ -1373,6 +1439,8 @@ void App::draw(white::RasterSurface &surface) {
     frame.turn_active = turn_active_;
     if (input_mode_ == InputMode::filter)
       file_filter_ = editor.value;
+    else if (input_mode_ == InputMode::rename)
+      rename_draft_ = editor.value;
     else if (input_mode_ == InputMode::trajectory_search)
       trajectory_search_ = editor.value;
     else if (input_mode_ == InputMode::settings) {
@@ -1382,6 +1450,8 @@ void App::draw(white::RasterSurface &surface) {
       message_draft_ = editor.value;
     frame.message_input = message_draft_;
     frame.file_filter = file_filter_;
+    frame.rename_draft = rename_draft_;
+    frame.rename_active = input_mode_ == InputMode::rename;
     frame.trajectory_search = trajectory_search_;
     frame.settings = settings_;
     frame.active_settings_field = active_settings_field_;
@@ -1389,6 +1459,8 @@ void App::draw(white::RasterSurface &surface) {
       std::string *active_text = nullptr;
       if (input_mode_ == InputMode::filter)
         active_text = &frame.file_filter;
+      else if (input_mode_ == InputMode::rename)
+        active_text = &frame.rename_draft;
       else if (input_mode_ == InputMode::trajectory_search)
         active_text = &frame.trajectory_search;
       else if (input_mode_ == InputMode::settings)
@@ -1410,6 +1482,7 @@ void App::draw(white::RasterSurface &surface) {
       frame.attachments.push_back({attachment.name, attachment.content.size()});
     frame.message_focused = input_mode_ == InputMode::message && editor.focused;
     frame.filter_focused = input_mode_ == InputMode::filter && editor.focused;
+    frame.rename_focused = input_mode_ == InputMode::rename && editor.focused;
     frame.trajectory_search_focused =
         input_mode_ == InputMode::trajectory_search && editor.focused;
     frame.settings_field_focused = input_mode_ == InputMode::settings &&

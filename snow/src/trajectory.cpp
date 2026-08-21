@@ -590,6 +590,39 @@ bool TrajectoryJournal::set_session_title_from_prompt(
   return true;
 }
 
+bool TrajectoryJournal::set_session_title(const tokmon::SessionId& session,
+                                          std::string_view title) {
+  TrajectoryEvent committed;
+  {
+    std::lock_guard lock(mutex_);
+    auto header = session_header(session);
+    header["title"] = std::string(title);
+    committed.type = "session/title";
+    committed.session_id = session;
+    committed.trace_id = tokmon::TraceId(tokmon::make_uuid());
+    committed.producer_fiber = arche::FiberId("snow.session.trajectory");
+    committed.data = {{"title", std::string(title)}, {"source", "manual"}};
+    execute("BEGIN IMMEDIATE");
+    try {
+      Statement statement(database_handle_,
+                          "UPDATE sessions SET header_json=? WHERE id=?");
+      const auto encoded = header.dump();
+      bind_text(statement.get(), 1, encoded);
+      bind_text(statement.get(), 2, session.str());
+      if (sqlite3_step(statement.get()) != SQLITE_DONE)
+        throw tokmon::Error("snow.session.title",
+                            sqlite3_errmsg(database_handle_));
+      committed = append_locked(std::move(committed));
+      execute("COMMIT");
+    } catch (...) {
+      execute("ROLLBACK");
+      throw;
+    }
+  }
+  committed_.emit(committed);
+  return true;
+}
+
 std::uint64_t TrajectoryJournal::last_seq(
     const tokmon::SessionId& session) const {
   std::lock_guard lock(mutex_);

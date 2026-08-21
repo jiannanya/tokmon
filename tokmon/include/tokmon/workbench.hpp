@@ -45,6 +45,7 @@ struct WorkbenchFrame {
   std::string status;
   std::string message_input;
   std::string file_filter;
+  std::string rename_draft;
   std::string model;
   std::string trajectory_search;
   DesktopSettings settings;
@@ -61,6 +62,8 @@ struct WorkbenchFrame {
   bool turn_active{false};
   bool message_focused{true};
   bool filter_focused{false};
+  bool rename_active{false};
+  bool rename_focused{false};
   bool trajectory_search_focused{false};
   bool settings_field_focused{false};
   bool caret_visible{true};
@@ -117,6 +120,7 @@ enum class WorkbenchActionKind {
   scroll_to_tail,
   focus_message,
   focus_filter,
+  focus_rename,
   set_editor_cursor,
   switch_session,
   attach_files,
@@ -273,6 +277,7 @@ private:
   std::string viewer_demo_file_{"transcribe.py"};
   white::Rect message_editor_bounds_;
   white::Rect filter_editor_bounds_;
+  white::Rect rename_editor_bounds_;
   white::Rect settings_editor_bounds_;
   white::Rect trajectory_search_bounds_;
   white::Rect settings_modal_bounds_;
@@ -281,6 +286,7 @@ private:
   std::optional<white::Rect> drag_region_;
   std::string message_editor_text_;
   std::string filter_editor_text_;
+  std::string rename_editor_text_;
   std::string settings_editor_text_;
   std::string settings_editor_field_;
   std::string trajectory_search_text_;
